@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------
+# Unity — carpetas generadas (nunca deben versionarse)
+# ---------------------------------------------------------------
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Assets que Unity regenera desde AssetStore / paquetes
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Addressables / Burst
+/[Aa]ssets/[Aa]ddressableAssetsData/*/*.bin*
+.consulo/
+/[Bb]urst[Dd]ebug[Ii]nformation_*/
+
+# ---------------------------------------------------------------
+# Solución / proyectos generados por Unity (IDE)
+# ---------------------------------------------------------------
+ExportedObj/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ---------------------------------------------------------------
+# IDEs
+# ---------------------------------------------------------------
+.vs/
+.idea/
+.gradle/
+/[Ll]ocalization*/
+.vscode/*
+!.vscode/extensions.json
+
+# ---------------------------------------------------------------
+# Sistema operativo
+# ---------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+[Tt]humbs.db
+[Tt]humbs.db.meta
+Desktop.ini
+
+# ---------------------------------------------------------------
+# Builds Android / Meta Quest
+# ---------------------------------------------------------------
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+
+# ---------------------------------------------------------------
+# Meta XR SDK / Oculus (caches locales)
+# ---------------------------------------------------------------
+/[Aa]ssets/Oculus/**/*.meta.bak
+/[Aa]ssets/XR/UserSimulationSettings/
+/[Aa]ssets/Oculus/VR/Editor/OVRPlatformToolSettings.asset*
+
+# ---------------------------------------------------------------
+# Otros
+# ---------------------------------------------------------------
+sysinfo.txt
+*.stackdump
