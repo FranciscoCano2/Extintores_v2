@@ -88,6 +88,44 @@ Comportamiento resultante (sin superposiciones):
   quedan quietos y parece que está roto. Probar SIEMPRE con Build and Run en el dispositivo.
 - Ante pérdida de tracking, el sistema puede reportar falsamente `ControllerNotInHand`. No
   disparar lógica irreversible (ej: "se cayó el extintor") solo con esa señal.
+- **Los materiales del pack usan shaders Built-in → salen ROSA/magenta en URP.**
+  `fire_extinguisher_tank.mat` y `Glass_part.mat` venían con shader legacy
+  (`m_Shader: {fileID: 3/30, guid: 0000000000000000f000000000000000}`). Se convirtieron a
+  `Universal Render Pipeline/Lit` (`guid 933532a4fcc9baf4fa0491de14d08ed7`), mapeando `_MainTex`
+  → `_BaseMap`. Ojo: otros packs importados (p. ej. props sueltos) pueden tener el mismo
+  problema; convertir con el Render Pipeline Converter o cambiando el shader a URP/Lit.
+- **El modelo NO tiene boquilla/manguera: hay que crearla o importar otro modelo.** El FBX
+  `Assets/Fire_Extinguisher/fire extinguisher.fbx` (de un pack "Police") contiene SOLO dos
+  Models: `FireExtinguisher` (tanque) y `Glass_Part` (visor del manómetro). No hay malla de
+  boquilla ni de palanca. ⚠️ El `.meta` del FBX lista `Object003`/`Object004` en
+  `fileIDToRecycleName`, pero son nombres OBSOLETOS de una versión anterior del FBX que fue
+  sobreescrita; el binario actual no los tiene (verificado con `strings`). Reinstanciar el FBX
+  NO agrega la boquilla. Para tenerla: modelar una simple con primitivas (cono/cilindro en
+  `NozzleTip`) o importar un modelo de extintor más completo.
+- **`RightHandAnchor`/`LeftHandAnchor` NO siguen el mando físico en multimodal.** El
+  `OVRCameraRig` los mueve a `GetLocalControllerPosition(GetActiveControllerForHand(...))`, y
+  `GetActiveControllerForHand` **da prioridad a la mano rastreada**. Un objeto acoplado a ese
+  anchor "se pega a la mano", no al mando. Para un prop con el mando atado (extintor), seguir la
+  pose del mando físico directamente: `OVRInput.GetLocalControllerPosition(RTouch/LTouch)` en el
+  espacio de `TrackingSpace`. Eso hace `ExtinguisherMount.followController` (activo por defecto).
+
+## Chorro / boquilla — esquema a DOS MANOS
+
+Uso realista: el **tanque va en la mano derecha** (`ExtinguisherRig`, `MountHand.Right`) y la
+**boquilla/manguera en la izquierda** (`Assets/Prefabs/NozzleRig.prefab`, `MountHand.Left`,
+`followController`). El disparo lo hace el **grip del mando DERECHO** (simula apretar la palanca)
+y la espuma sale de la boquilla izquierda.
+
+- `NozzleRig` = mount izquierdo + `Visual` (Hose/Horn con cilindros primitivos, material del
+  tanque) + `NozzleTip` con `ExtinguisherSpray`. Se arrastra a la escena y sigue el mando
+  izquierdo solo (el mount, si no tiene anchor/trackingSpace, busca `OVRCameraRig.trackingSpace`
+  con `FindFirstObjectByType`).
+- `ExtinguisherSpray` (en `NozzleTip`): crea su propio `ParticleSystem` por código (textura de
+  punto suave generada en runtime, material `Sprites/Default` → sin depender de assets del pack).
+  El chorro sale por el **+Z** del `NozzleTip`. Lee `OVRInput.Get(Axis1D.PrimaryHandTrigger,
+  RTouch)` (grip). Expone `IsSpraying` para la futura lógica de apagado de fuegos.
+- Calibración: offset de la boquilla en `NozzleRig > ExtinguisherMount` (Position/Rotation
+  Offset); parámetros del chorro (rate, speed, size, cono) en `NozzleTip > ExtinguisherSpray`.
 
 ## API útil para la lógica del extintor
 
