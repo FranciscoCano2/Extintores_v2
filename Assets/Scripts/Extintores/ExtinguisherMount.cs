@@ -25,6 +25,17 @@ namespace Extintores
         [Tooltip("Mano que sostiene el extintor. Determina el mando leído para trigger/háptica.")]
         [SerializeField] private MountHand hand = MountHand.Right;
 
+        [Tooltip("Si está activo, el extintor sigue la pose del MANDO FÍSICO (RTouch/LTouch) " +
+                 "en vez de la del anchor. Imprescindible en multimodal: RightHandAnchor sigue " +
+                 "el input 'activo' dando prioridad a la mano rastreada, no al mando. Como el " +
+                 "prop real lleva el mando atado, hay que seguir el mando siempre.")]
+        [SerializeField] private bool followController = true;
+
+        [Tooltip("Espacio de tracking del OVRCameraRig (nodo 'TrackingSpace'), en el que están " +
+                 "definidas las poses de OVRInput. Si queda vacío se usa el padre del anchor " +
+                 "(RightHandAnchor cuelga de TrackingSpace), que es lo correcto para este rig.")]
+        [SerializeField] private Transform trackingSpace;
+
         [Header("Offset de calibración (mando ↔ extintor real)")]
         [Tooltip("Posición del extintor relativa al anchor, en espacio local del anchor (metros). " +
                  "Se calibrará más adelante para casar con el prop físico.")]
@@ -66,11 +77,12 @@ namespace Extintores
 
         private void LateUpdate()
         {
-            if (anchor == null) return;
+            // Pose base del "anclaje": o la del mando físico (multimodal) o la del anchor.
+            if (!TryGetAnchorPose(out Vector3 anchorPos, out Quaternion anchorRot)) return;
 
             // Pose objetivo: dónde debe quedar el punto de agarre del extintor.
-            Vector3 targetPos = anchor.TransformPoint(positionOffset);
-            Quaternion targetRot = anchor.rotation * Quaternion.Euler(rotationOffset);
+            Vector3 targetPos = anchorPos + anchorRot * positionOffset;
+            Quaternion targetRot = anchorRot * Quaternion.Euler(rotationOffset);
 
             if (gripPoint == null)
             {
@@ -88,6 +100,53 @@ namespace Extintores
             Vector3 rootPos = targetPos - rootRot * gripLocalPos;
 
             transform.SetPositionAndRotation(rootPos, rootRot);
+        }
+
+        /// <summary>
+        /// Pose base a la que se acopla el extintor. En modo <see cref="followController"/> es la
+        /// pose del mando físico (RTouch/LTouch) expresada en mundo; si no, la del anchor.
+        /// </summary>
+        private bool TryGetAnchorPose(out Vector3 pos, out Quaternion rot)
+        {
+            if (followController)
+            {
+                // Espacio en el que OVRInput reporta las poses (TrackingSpace del rig).
+                Transform space = trackingSpace != null ? trackingSpace
+                                : anchor != null ? anchor.parent
+                                : ResolveTrackingSpace();
+                if (space != null)
+                {
+                    var mask = hand == MountHand.Right ? OVRInput.Controller.RTouch
+                                                       : OVRInput.Controller.LTouch;
+                    pos = space.TransformPoint(OVRInput.GetLocalControllerPosition(mask));
+                    rot = space.rotation * OVRInput.GetLocalControllerRotation(mask);
+                    return true;
+                }
+                // Sin espacio de tracking válido: caemos al anchor como respaldo.
+            }
+
+            if (anchor == null)
+            {
+                pos = default;
+                rot = default;
+                return false;
+            }
+
+            pos = anchor.position;
+            rot = anchor.rotation;
+            return true;
+        }
+
+        private Transform _autoSpace;
+
+        /// <summary>Busca el TrackingSpace del OVRCameraRig si no se asignó anchor/trackingSpace.
+        /// Permite montar un objeto (p. ej. la boquilla en la izquierda) sin cablear el anchor.</summary>
+        private Transform ResolveTrackingSpace()
+        {
+            if (_autoSpace != null) return _autoSpace;
+            var rig = FindFirstObjectByType<OVRCameraRig>();
+            if (rig != null) _autoSpace = rig.trackingSpace;
+            return _autoSpace;
         }
 
         private void OnDrawGizmosSelected()
