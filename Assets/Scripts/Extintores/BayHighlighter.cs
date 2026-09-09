@@ -20,6 +20,8 @@ namespace Extintores
         [SerializeField] private Color dangerColor = new Color(0.95f, 0.20f, 0.15f);
         [Tooltip("Efectividad mínima para considerar el agente 'correcto' (verde).")]
         [SerializeField, Range(0f, 1f)] private float correctThreshold = 0.9f;
+        [Tooltip("Color de las bahías deshabilitadas (modo tutorial: agentes no efectivos).")]
+        [SerializeField] private Color disabledColor = new Color(0.35f, 0.35f, 0.35f);
 
         private MaterialPropertyBlock _mpb;
         private float _next;
@@ -45,12 +47,22 @@ namespace Extintores
                 var frame = FrameRenderer(bay);
                 if (frame == null) continue;
 
-                Color c = bay.BodyColor;
-                if (fire != null)
+                // Una bahía apagada por el tutorial se ve gris y no compite con el verde/rojo:
+                // si no la podés usar, el resaltado de efectividad solo confundiría.
+                Color c;
+                if (!bay.Interactable)
                 {
-                    float eff = fire.EffectivenessOf(bay.Agent);
-                    if (eff < 0f) c = dangerColor;
-                    else if (eff >= correctThreshold) c = correctColor;
+                    c = disabledColor;
+                }
+                else
+                {
+                    c = bay.BodyColor;
+                    if (fire != null)
+                    {
+                        float eff = fire.EffectivenessOf(bay.Agent);
+                        if (eff < 0f) c = dangerColor;
+                        else if (eff >= correctThreshold) c = correctColor;
+                    }
                 }
 
                 frame.GetPropertyBlock(_mpb);

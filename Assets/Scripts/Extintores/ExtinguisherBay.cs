@@ -33,6 +33,13 @@ namespace Extintores
         public Color BodyColor => bodyColor;
         public Texture2D Label => label;
 
+        /// <summary>
+        /// Si es <c>false</c> la bahía no entrega su extintor. Lo usa el modo tutorial para dejar
+        /// disponibles solo los agentes efectivos contra el fuego actual; <see cref="BayHighlighter"/>
+        /// las pinta grises. Por defecto todas están habilitadas.
+        /// </summary>
+        public bool Interactable { get; set; } = true;
+
         private ExtinguisherSwappable _candidate;
         private float _readyAt;
 
@@ -58,6 +65,7 @@ namespace Extintores
 
         private void OnTriggerEnter(Collider other)
         {
+            if (!Interactable) return;
             var sw = other.GetComponentInParent<ExtinguisherSwappable>();
             if (sw == null) return;
             _candidate = sw;
@@ -66,7 +74,7 @@ namespace Extintores
 
         private void OnTriggerStay(Collider other)
         {
-            if (_candidate == null) return;
+            if (!Interactable || _candidate == null) return;
             var sw = other.GetComponentInParent<ExtinguisherSwappable>();
             if (sw != _candidate || Time.time < _readyAt) return;
 
