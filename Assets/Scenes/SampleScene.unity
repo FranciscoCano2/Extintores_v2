@@ -348,6 +348,11 @@ Transform:
   - {fileID: 2002353263}
   m_Father: {fileID: 1704801661}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!4 &517157591 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400002, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
+  m_PrefabInstance: {fileID: 1704801660}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &662868902
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -840,6 +845,54 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1312998107}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &978159029
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 978159030}
+  - component: {fileID: 978159031}
+  m_Layer: 0
+  m_Name: TrainingHud
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &978159030
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 978159029}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.35, y: -0.2, z: 1.2}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 517157591}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &978159031
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 978159029}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e5f60718293a4b5c6d7e8f90a1b2c3d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Extintores.TrainingHud
+  training: {fileID: 1872034572}
+  text: {fileID: 0}
+  normalColor: {r: 1, g: 1, b: 1, a: 1}
+  warnColor: {r: 1, g: 0.3, b: 0.2, a: 1}
 --- !u!1 &1312998106
 GameObject:
   m_ObjectHideFlags: 0
@@ -1154,6 +1207,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 459718, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 478788261}
+    - targetCorrespondingSourceObject: {fileID: 400002, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 978159030}
     - targetCorrespondingSourceObject: {fileID: 482130, guid: 126d619cf4daa52469682f85c1378b4a, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1312998107}
@@ -1544,7 +1600,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e1f2a3b4c5d6708192a3b4c5d6e7f809, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Extintores.ExtinguisherSwappable
-  spray: {fileID: 0}
+  spray: {fileID: 2029592559}
   bodyRenderer: {fileID: 0}
   tintBody: 0
   labelRenderer: {fileID: 1558706005}
@@ -1558,33 +1614,14 @@ GameObject:
   m_Component:
   - component: {fileID: 1872034571}
   - component: {fileID: 1872034570}
-  - component: {fileID: 1872034569}
+  - component: {fileID: 1872034572}
   m_Layer: 0
-  m_Name: 'TrainingManager '
+  m_Name: TrainingManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1872034569
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1872034568}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8d4b2f6a1c9e40538a7b3d0e2f1c6a49, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Extintores.FireManager
-  autoCollectOnStart: 1
-  onFireExtinguished:
-    m_PersistentCalls:
-      m_Calls: []
-  onAllFiresExtinguished:
-    m_PersistentCalls:
-      m_Calls: []
 --- !u!82 &1872034570
 AudioSource:
   m_ObjectHideFlags: 0
@@ -1697,6 +1734,31 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1872034572
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1872034568}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d4e5f60718293a4b5c6d7e8f90a1b2c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Extintores.TrainingManager
+  fireManager: {fileID: 743880974}
+  spray: {fileID: 2029592559}
+  showBadges: 1
+  toggleButton: 2
+  audioSource: {fileID: 1872034570}
+  wrongClip: {fileID: 8300000, guid: f89b742d6e1c73144b98c24ea753e04b, type: 3}
+  haptics: 1
+  onWrongAgent:
+    m_PersistentCalls:
+      m_Calls: []
+  onAllExtinguished:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &2001856924
 GameObject:
   m_ObjectHideFlags: 0
@@ -1813,7 +1875,8 @@ GameObject:
   m_Component:
   - component: {fileID: 2019465497}
   - component: {fileID: 2019465498}
-  m_Layer: 0
+  - component: {fileID: 2019465499}
+  m_Layer: 7
   m_Name: SwapSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1829,7 +1892,7 @@ Transform:
   m_GameObject: {fileID: 2019465496}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: -0.045495696, y: 0.22603075, z: -0.013684601}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1850,12 +1913,39 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.01, y: 0.01, z: 0.01}
+  m_Size: {x: 0.15, y: 0.4, z: 0.14438057}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!54 &2019465499
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2019465496}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 1
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1001 &2029592558
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1913,6 +2003,17 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: e2b7c4a19f6d43c8a5e1b0d7c3f2a6b4, type: 3}
+--- !u!114 &2029592559 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8100000000000000042, guid: e2b7c4a19f6d43c8a5e1b0d7c3f2a6b4, type: 3}
+  m_PrefabInstance: {fileID: 2029592558}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c1d3e2f9a7b48c6b0e4d1a6f3c9b2e7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Extintores.ExtinguisherSpray
 --- !u!1001 &2146156729
 PrefabInstance:
   m_ObjectHideFlags: 0
