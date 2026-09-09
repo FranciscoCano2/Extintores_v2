@@ -43,16 +43,18 @@ namespace Extintores.EditorTools
             root.AddComponent<ExtinguisherStation>();
             root.AddComponent<BayHighlighter>(); // resalta la bahía correcta/peligrosa
 
+            // Panel de mesa, no pared: ~1 m de ancho para que entre entero al costado del usuario y
+            // se alcancen las 5 bahías sin caminar. Antes era 2.45 × 1.3 m y quedaba enorme.
             int n = Bays.Length;
-            const float pitch = 0.45f, height = 1.3f;
-            float width = n * pitch + 0.2f;
+            const float pitch = 0.18f, height = 0.55f;
+            float width = n * pitch + 0.10f;
 
             // Panel de fondo.
             var board = GameObject.CreatePrimitive(PrimitiveType.Cube);
             board.name = "Backboard";
             StripCollider(board);
             board.transform.SetParent(root.transform, false);
-            board.transform.localScale = new Vector3(width, height, 0.08f);
+            board.transform.localScale = new Vector3(width, height, 0.05f);
             board.transform.localPosition = new Vector3(0f, height / 2f, 0f);
             board.GetComponent<MeshRenderer>().sharedMaterial =
                 GetColorMat("Board", new Color(0.85f, 0.85f, 0.85f));
@@ -65,13 +67,19 @@ namespace Extintores.EditorTools
                 var b = Bays[i];
                 var bay = new GameObject($"Bay_{b.Agent}");
                 bay.transform.SetParent(root.transform, false);
-                bay.transform.localPosition = new Vector3(x0 + i * pitch, bayY, 0.06f);
+                // Todo el frente del panel es su −Z: es la cara legible de los Quad/TextMesh de
+                // Unity y por lo tanto el lado desde el que mira el usuario. El trigger tiene que
+                // abrirse hacia ESE lado, o habría que leer los rótulos de un lado y meter el
+                // tanque por el otro.
+                bay.transform.localPosition = new Vector3(x0 + i * pitch, bayY, -0.04f);
 
                 // Volumen-trigger de la bahía + componente (auto agrega RB kinemático y layer Interactor).
+                // Es más profundo (Z) que ancho: se entra de frente con el tanque y no se dispara la
+                // bahía de al lado, que ahora está a solo 18 cm.
                 var box = bay.AddComponent<BoxCollider>();
                 box.isTrigger = true;
-                box.size = new Vector3(0.30f, 0.40f, 0.35f);
-                box.center = new Vector3(0f, 0f, 0.12f);
+                box.size = new Vector3(0.16f, 0.18f, 0.22f);
+                box.center = new Vector3(0f, 0f, -0.10f);
 
                 var comp = bay.AddComponent<ExtinguisherBay>();
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{LabelsFolder}/{b.Label}.png");
@@ -82,7 +90,7 @@ namespace Extintores.EditorTools
                 frame.name = "Frame";
                 StripCollider(frame);
                 frame.transform.SetParent(bay.transform, false);
-                frame.transform.localScale = new Vector3(0.28f, 0.34f, 0.04f);
+                frame.transform.localScale = new Vector3(0.12f, 0.14f, 0.03f);
                 frame.GetComponent<MeshRenderer>().sharedMaterial = GetColorMat(b.Agent.ToString(), b.Color);
 
                 // Etiqueta (quad al frente).
@@ -90,8 +98,12 @@ namespace Extintores.EditorTools
                 q.name = "Label";
                 StripCollider(q);
                 q.transform.SetParent(bay.transform, false);
-                q.transform.localPosition = new Vector3(0f, 0f, 0.021f); // apenas delante del marco
-                q.transform.localScale = Vector3.one * 0.26f;
+                // Del lado −Z, que es la cara legible de un Quad de Unity. El builder original lo
+                // ponía en +Z y hubo que corregirlo a mano en el prefab; queda arreglado en origen.
+                // El trigger se abre igual hacia +Z (ver el center de arriba): el usuario mete el
+                // tanque por atrás del rótulo, que es lo que se ve desde el lobby.
+                q.transform.localPosition = new Vector3(0f, 0f, -0.025f);
+                q.transform.localScale = Vector3.one * 0.13f;
                 if (tex != null)
                     q.GetComponent<MeshRenderer>().sharedMaterial = GetLabelMat(b.Label, tex);
             }

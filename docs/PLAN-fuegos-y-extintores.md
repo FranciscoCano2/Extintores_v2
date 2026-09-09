@@ -227,6 +227,45 @@ vigilar el peso en Quest (evitar 4K, atlasar/optimizar). Lista concreta en el **
 - [ ] Correr `Validate Setup` → `Fix Scene Wiring` → `Validate Setup` (debe dar cero) y **guardar
       la escena (Ctrl+S)**.
 
+**Bloque 7 — Ejercicio: galpón, menú de modos y puestos** *(septiembre 2026)*
+
+Tras la primera prueba en visor quedó claro que faltaba el ejercicio en sí: los 4 fuegos flotaban
+en el vacío y no había forma de recorrerlos ni de validar la elección de extintor.
+
+- [x] **Bugs de la prueba en visor.** `FireClassBadge` ahora compensa la escala del padre: en
+      `Fire_B` la llama cuelga del auto (escala ×100) y el cartel medía ~25 m ("la B gigante").
+      Y el `OVRCameraRig` estaba en **EyeLevel** con el rig en y=0, así que los ojos arrancaban al
+      ras del piso — esa era la causa real del "estoy lejos/abajo de la plataforma", no la
+      distancia (la pared estaba a 1,32 m). *(hecho)*
+- [x] **`SprayButton`**: botones que se accionan **apuntándoles el chorro del extintor**, con barra
+      de carga progresiva para que un barrido accidental no los dispare. Reutiliza
+      `OnParticleCollision` igual que `FireSource`. Sin UGUI, sin TextMeshPro y sin puntero láser;
+      funciona a distancia y el extintor ya está siempre en la mano. *(hecho)*
+- [x] **`TrainingSession`** con los tres modos: **tutorial** (los 4 puestos en orden),
+      **aleatorio** (uno al azar) y **personalizado** (el que elijas). Ubica al usuario en cada
+      puesto, mueve el panel a su costado y **nunca teletransporta solo**: al apagarse el fuego
+      aparece "Continuar". *(hecho)*
+- [x] **Gateo del tutorial**: solo quedan habilitadas las bahías con efectividad ≥ 0.9 contra ese
+      fuego — TODAS las efectivas, no una sola (para clase A sirven Agua, Espuma y ABC). Las demás
+      se ven grises y no entregan extintor. *(hecho)*
+- [x] **`FireSource.ResetFire()`** y **`FireManager.BeginSession()`**: sin ellos el fuego no se
+      podía volver a encender y `_completed` quedaba latcheado tras la primera etapa. *(hecho)*
+- [x] **Panel de extintores a ~1 m** (antes 2,45 × 1,3 m): pitch 0.18, alto 0.55. Es un panel de
+      mesa que se alcanza con el brazo. *(hecho)*
+- [x] **`WarehouseBuilder`** (blockout de galpón 24×16 m con zonas y anchors) y
+      **`TrainingSceneBuilder`** (arma el ejercicio sobre la escena abierta, conservando la
+      calibración de los rigs). *(hecho)*
+- [ ] Correr **Build Warehouse Blockout** → **Build Training Scene** → `File ▸ Save As…` como
+      `Assets/Scenes/Training.unity` y ponerla primera en Build Settings.
+- [ ] Importar el pack gratis *RPG/FPS Game Assets — Industrial Set v2.0* y reemplazar el blockout
+      zona por zona (los puestos son Transforms: no hay que tocar lógica).
+
+> **Convención de orientación (importante).** La cara legible de un Quad y de un TextMesh de Unity
+> es su **−Z**. Por eso los botones, los rótulos de las bahías y el trigger de cada bahía miran
+> todos hacia −Z, y los anchors del galpón orientan panel y menú **en la misma dirección que el
+> usuario**, no enfrentados a él. Si algo se ve espejado o el trigger no dispara, revisá este eje
+> antes que ninguna otra cosa.
+
 **Bloque 5 — Prueba en visor** *(imprescindible)*
 - [ ] Build & Run en Quest: colisión de partículas y pose de mandos **no** llegan bien por Link.
 - [ ] Verificar: agente equivocado no apaga/aviva; swap en la pared; victoria por `FireManager`.

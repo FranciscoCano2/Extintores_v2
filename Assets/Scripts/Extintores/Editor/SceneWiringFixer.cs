@@ -82,6 +82,7 @@ namespace Extintores.EditorTools
             FixStationPrefab(apply, station);
             FixHud(apply, training);
             CheckFires(spray);
+            CheckTrainingSetup();
 
             if (apply)
             {
@@ -118,7 +119,7 @@ namespace Extintores.EditorTools
         // ------------------------------------------------------------------ layers
         private static void CheckLayers()
         {
-            foreach (var n in new[] { "Fire", "Interactor" })
+            foreach (var n in new[] { "Fire", "Interactor", SprayButton.LayerName })
             {
                 if (LayerMask.NameToLayer(n) >= 0) Ok($"Layer '{n}' = {LayerMask.NameToLayer(n)}.");
                 else Problem($"Falta la layer '{n}' (Project Settings ▸ Tags and Layers). " +
@@ -489,6 +490,54 @@ namespace Extintores.EditorTools
                 if (mask != null && mask.intValue != 0 && (mask.intValue & (1 << fire)) == 0)
                     Problem("ExtinguisherSpray.collidesWith no incluye la layer 'Fire': el chorro no apaga nada.");
                 else Ok("El chorro colisiona contra la layer 'Fire'.");
+            }
+        }
+
+        // ------------------------------------------------------------------ ejercicio
+        /// <summary>
+        /// Chequeos del ejercicio (menú, puestos, reposicionamiento). Solo reporta: lo arma
+        /// <c>Extintores ▸ Build Training Scene</c>, no este fixer.
+        /// </summary>
+        private static void CheckTrainingSetup()
+        {
+            var session = Object.FindFirstObjectByType<TrainingSession>(FindObjectsInactive.Include);
+            if (session == null)
+            {
+                Ok("(aviso) No hay TrainingSession: la escena todavía es la vieja, sin modos ni menú. " +
+                   "Corré 'Extintores ▸ Build Training Scene'.");
+                return;
+            }
+
+            var stations = Object.FindObjectsByType<FireStation>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (stations.Length == 0) Problem("Hay TrainingSession pero ningún FireStation.");
+            else Ok($"{stations.Length} puesto(s) de entrenamiento.");
+
+            foreach (var s in stations)
+            {
+                if (s.Fire == null) Problem($"El puesto '{s.name}' no tiene FireSource.");
+                if (s.PanelAnchor == null) Problem($"El puesto '{s.name}' no tiene PanelAnchor: el panel no se movería.");
+            }
+
+            var buttons = Object.FindObjectsByType<SprayButton>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (buttons.Length == 0) Problem("No hay ningún SprayButton: no se puede navegar el menú.");
+            else Ok($"{buttons.Length} botón(es) accionables con el chorro.");
+
+            int buttonLayer = LayerMask.NameToLayer(SprayButton.LayerName);
+            foreach (var b in buttons)
+                if (buttonLayer >= 0 && b.gameObject.layer != buttonLayer)
+                    Problem($"El botón '{b.name}' está en la layer " +
+                            $"'{LayerMask.LayerToName(b.gameObject.layer)}': el chorro no lo va a tocar.");
+
+            if (Object.FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include) == null)
+                Problem("No hay MainMenu: no habría forma de elegir el modo.");
+
+            var fm = Object.FindFirstObjectByType<FireManager>(FindObjectsInactive.Include);
+            if (fm != null)
+            {
+                var auto = new SerializedObject(fm).FindProperty("autoCollectOnStart");
+                if (auto != null && auto.boolValue)
+                    Problem("FireManager.autoCollectOnStart está encendido: registraría los 4 fuegos " +
+                            "y pisaría la etapa que arma TrainingSession. Debe estar apagado.");
             }
         }
 
