@@ -11,6 +11,11 @@ namespace Extintores
     /// código (quad + Sprites/Default con la textura del badge) y se cuelga del PADRE del fuego para
     /// no encogerse cuando el fuego mengua. El <see cref="FirePrefabBuilder"/> le asigna la textura
     /// según la clase.
+    ///
+    /// ⚠️ <b>El tamaño se compensa contra la escala del padre en cada frame.</b> Si el cartel usara
+    /// <c>localScale = size</c> a secas, heredaría la escala de ese padre: en Fire_B, donde la llama
+    /// cuelga del auto (escala ×100), el cartel medía ~25 m de lado. La posición ya se fija en mundo,
+    /// así que solo el tamaño necesitaba la corrección.
     /// </summary>
     [RequireComponent(typeof(FireSource))]
     public class FireClassBadge : MonoBehaviour
@@ -47,7 +52,7 @@ namespace Extintores
 
             _quad = go.transform;
             _quad.SetParent(transform.parent != null ? transform.parent : transform, true);
-            _quad.localScale = Vector3.one * size;
+            ApplyWorldSize();
 
             _cam = Camera.main;
             _fire.Extinguished += _ => { if (_rend != null) _rend.enabled = false; };
@@ -61,10 +66,29 @@ namespace Extintores
             if (_rend.enabled != show) _rend.enabled = show;
             if (!show) return;
 
+            ApplyWorldSize();
             _quad.position = transform.position + Vector3.up * heightOffset;
             if (_cam == null) _cam = Camera.main;
             if (_cam != null)
                 _quad.rotation = Quaternion.LookRotation(_quad.position - _cam.transform.position);
         }
+
+        /// <summary>
+        /// Deja el cartel de <see cref="size"/> metros REALES, sin importar cómo esté escalado el
+        /// padre del que cuelga. Se recalcula cada frame porque el padre puede escalarse en runtime.
+        /// </summary>
+        private void ApplyWorldSize()
+        {
+            var parent = _quad.parent;
+            if (parent == null) { _quad.localScale = Vector3.one * size; return; }
+
+            var s = parent.lossyScale;
+            _quad.localScale = new Vector3(
+                size / NonZero(s.x),
+                size / NonZero(s.y),
+                size / NonZero(s.z));
+        }
+
+        private static float NonZero(float v) => Mathf.Approximately(v, 0f) ? 1f : Mathf.Abs(v);
     }
 }
