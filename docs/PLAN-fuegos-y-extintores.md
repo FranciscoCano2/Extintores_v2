@@ -160,8 +160,18 @@ vigilar el peso en Quest (evitar 4K, atlasar/optimizar). Lista concreta en el **
 - [x] Elegida UNA causa por clase: A `Cardboard_Box`, B `Sports_Car`, C `Electrical_Breaker_Panel`,
       K `Gas_Stove`. `Audi_Novulari` (37 MB, redundante) **eliminado**; `VR_Fuse_Box` (537 KB) se
       conserva como recambio de C. *(hecho)*
-- [ ] Peso de malla: correr **Extintores ▸ Optimize FireCause Models** y mirar el tri-count. El
-      cartón de clase A es un escaneo Tripo de 64 MB: si supera ~50 k triángulos, decimarlo.
+- [x] Peso de malla medido con **Extintores ▸ Optimize FireCause Models** (sept 2026):
+      | Modelo | Triángulos |
+      |---|---|
+      | Cardboard_Box (A) | **1.982.529** ⚠️ |
+      | sportcar.017 (B) | 5.042 |
+      | Tz-ExteriorElectricBox2 (C) | 4.698 |
+      | gas_stove_main (K) | 7.942 |
+      | FuseBox (alt. C) | 1.172 |
+      El cartón (escaneo Tripo) tenía **100× más triángulos que los otros tres juntos** y ~6×
+      el presupuesto completo de un frame en Quest. **Decimado a 8.000 tri** con Blender
+      headless (60,9 MB → 396 KB); el original queda recuperable en la historia de git/LFS.
+      Receta en §7. *(hecho)*
 - [ ] Unificar iluminación entre props (mismo ambiente/URP settings) y revisar escala de cada FBX.
 
 **Bloque 1 — Prefabs de fuego por clase**
@@ -229,8 +239,19 @@ vigilar el peso en Quest (evitar 4K, atlasar/optimizar). Lista concreta en el **
   rosa/magenta. Convertir con Render Pipeline Converter o a `URP/Lit` (ver `CLAUDE.md`).
 - **Coherencia visual:** con la Opción 1 (realista, elegida) los props vienen de autores distintos;
   unificar iluminación (mismo ambiente/URP settings) o el contraste canta.
-- **Peso en Quest:** limitar cantidad de VFX simultáneos y texturas 4K. Ojo con los escaneos
-  (Tripo/photogrammetry): pesan y traen muchísimos triángulos. Medir con `ModelImportOptimizer`.
+- **Peso en Quest:** limitar cantidad de VFX simultáneos y texturas 4K. **Ojo con los escaneos
+  (Tripo/photogrammetry):** el cartón de clase A traía 1,98 M de triángulos — 100× los otros tres
+  props juntos — sin que nada lo delatara salvo el tamaño del archivo. Medir SIEMPRE con
+  `Extintores ▸ Optimize FireCause Models` antes de dar un prop por bueno; `meshCompression`
+  achica el archivo pero **no** el costo de dibujarlo.
+- **Decimar un FBX sin abrir Blender a mano** (receta usada con el cartón):
+  ```
+  blender --background --python decimate_fbx.py -- <in.fbx> <out.fbx> <tris_objetivo>
+  ```
+  El script aplica un modifier Decimate/Collapse y re-exporta. Clave: **conservar los nombres de
+  objeto, malla y material** — Unity referencia los sub-assets del FBX por nombre, así que si
+  cambian, los prefabs que los usan quedan apuntando a nada y el modelo desaparece sin error.
+  Con el normal map a resolución completa la pérdida de detalle casi no se nota.
 - **El cableado de escena falla en silencio.** Ninguno de los cuatro bugs de agosto 2026 (manager
   duplicado, componente equivocado, sensor sin `isTrigger`, prefab desactualizado) daba error de
   compilación ni excepción en runtime: simplemente no pasaba nada. Ante "el código está pero no

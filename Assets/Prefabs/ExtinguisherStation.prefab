@@ -516,6 +516,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1947393113859557286}
   - component: {fileID: 314241846028089023}
+  - component: {fileID: 6555484428874284701}
   m_Layer: 0
   m_Name: ExtinguisherStation
   m_TagString: Untagged
@@ -556,6 +557,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a1b2c3d4e5f60718293a4b5c6d7e8f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Extintores.ExtinguisherStation
+--- !u!114 &6555484428874284701
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3621566359748098239}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f60718293a4b5c6d7e8f90a1b2c3d4e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Extintores.BayHighlighter
+  station: {fileID: 0}
+  updateInterval: 0.25
+  correctColor: {r: 0.2, g: 0.9, b: 0.3, a: 1}
+  dangerColor: {r: 0.95, g: 0.2, b: 0.15, a: 1}
+  correctThreshold: 0.9
 --- !u!1 &3808616647919676069
 GameObject:
   m_ObjectHideFlags: 0

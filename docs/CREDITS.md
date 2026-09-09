@@ -23,6 +23,9 @@ Estas son las que instancia `FirePrefabBuilder` en `Fire_A/B/C/K`:
 ### Clase A — Sólidos (cartón)
 - "Cardboard+box+3d+model" (<https://skfb.ly/pL967>) by Jerovdl is licensed under Creative Commons
   Attribution (<http://creativecommons.org/licenses/by/4.0/>). — **CC-BY: acreditar.**
+  > ⚠️ **Modificado:** el original es un escaneo de 1.982.529 triángulos (60,9 MB), inviable en
+  > Quest. Se decimó a 8.000 triángulos (396 KB) con `tools/decimate_fbx.py`; las texturas son las
+  > originales. CC-BY permite obras derivadas indicando los cambios: esta nota cumple ese requisito.
 
 ### Clase B — Líquido inflamable (vehículo)
 - "Low-Poly Sports Car Free" (<https://skfb.ly/6YnLC>) by donnichols is licensed under Creative
