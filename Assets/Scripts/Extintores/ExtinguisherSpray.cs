@@ -137,7 +137,12 @@ namespace Extintores
             collision.dampen = 0.8f;                 // el chorro no rebota lejos
             collision.bounce = 0f;
             collision.lifetimeLoss = 0.35f;          // las partículas se consumen al pegar
-            collision.collidesWith = collidesWith.value != 0 ? collidesWith.value : LayerMask.GetMask("Fire");
+            // La layer de los botones (SprayButton) entra SIEMPRE, aunque el LayerMask serializado
+            // en el prefab sea anterior a que esa layer existiera: si dependiera del valor guardado,
+            // el chorro atravesaría el menú sin accionarlo y no habría ningún error que lo delate.
+            int mask = collidesWith.value != 0 ? collidesWith.value : LayerMask.GetMask("Fire");
+            int buttons = LayerMask.GetMask(SprayButton.LayerName);
+            collision.collidesWith = mask | buttons;
 
             // Crece de startSize a endSize a lo largo de la vida.
             var sol = _ps.sizeOverLifetime;
