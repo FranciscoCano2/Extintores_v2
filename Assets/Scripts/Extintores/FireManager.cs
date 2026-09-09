@@ -59,6 +59,31 @@ namespace Extintores
                 Debug.LogWarning("[FireManager] No se encontró ningún FireSource en la escena.");
         }
 
+        /// <summary>
+        /// Arranca una etapa nueva contando SOLO los fuegos indicados: desuscribe los anteriores,
+        /// pone los contadores a cero y levanta el latch de "completado".
+        ///
+        /// Lo usa <see cref="TrainingSession"/>, que decide qué fuegos entran según el modo
+        /// (tutorial = los 4, aleatorio/personalizado = uno). Sin esto <see cref="autoCollectOnStart"/>
+        /// agarraría todos los fuegos de la escena y <c>_completed</c> quedaría latcheado para
+        /// siempre después de la primera etapa.
+        /// </summary>
+        public void BeginSession(IEnumerable<FireSource> fires)
+        {
+            foreach (var f in _fires)
+                if (f != null) f.Extinguished -= HandleExtinguished;
+            _fires.Clear();
+
+            TotalFires = 0;
+            RemainingFires = 0;
+            _completed = false;
+
+            if (fires == null) return;
+            foreach (var f in fires) Register(f);
+
+            Debug.Log($"[FireManager] Etapa iniciada con {TotalFires} fuego(s).");
+        }
+
         /// <summary>Registra un fuego para el conteo. Ignora nulos, repetidos y ya apagados.</summary>
         public void Register(FireSource fire)
         {

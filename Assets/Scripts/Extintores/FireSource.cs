@@ -196,6 +196,37 @@ namespace Extintores
             if (fireLight != null) fireLight.intensity = _baseLightIntensity * t;
         }
 
+        /// <summary>
+        /// Vuelve a encender el fuego desde cero: salud llena, collider y partículas activos, escala
+        /// original. Lo usa <see cref="TrainingSession"/> para repetir un puesto (modo aleatorio o
+        /// personalizado) sin recargar la escena.
+        ///
+        /// ⚠️ Cancela el <c>Invoke</c> de <see cref="Deactivate"/> que dejó pendiente
+        /// <see cref="Extinguish"/>: sin eso, un fuego reseteado dentro de la ventana de
+        /// <see cref="fadeOutSeconds"/> se apagaría solo unos segundos después.
+        /// </summary>
+        public void ResetFire()
+        {
+            CancelInvoke(nameof(Deactivate));
+
+            gameObject.SetActive(true);
+            IsExtinguished = false;
+            Health = maxHealth;
+            LastAimQuality01 = 0f;
+            LastHitTime = 0f;
+            _nextWrongWarnTime = 0f;
+
+            transform.localScale = _baseScale;
+            if (fireLight != null) fireLight.intensity = _baseLightIntensity;
+
+            var col = GetComponent<Collider>();
+            if (col != null) col.enabled = true;
+
+            if (_systems != null)
+                foreach (var ps in _systems)
+                    if (ps != null) { ps.Clear(true); ps.Play(true); }
+        }
+
         private void Extinguish()
         {
             IsExtinguished = true;
