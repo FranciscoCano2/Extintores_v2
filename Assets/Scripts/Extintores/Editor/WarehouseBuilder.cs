@@ -26,7 +26,14 @@ namespace Extintores.EditorTools
         private const float WallH = 6f;
         private const float WallT = 0.3f;
 
-        /// <summary>Distancia a la que se para el usuario respecto del fuego.</summary>
+        /// <summary>
+        /// Distancia por defecto a la que se para el usuario respecto del fuego.
+        ///
+        /// ⚠ <b>Tiene un techo duro:</b> el chorro llega hasta <c>speed × lifetime</c> = 6 × 0,6 =
+        /// <b>3,6 m</b> (ver <see cref="ExtinguisherSpray"/>). Pasado eso las partículas mueren antes
+        /// de tocar el fuego y el puesto se vuelve imposible, sin ningún error que lo explique. Si
+        /// hace falta alejar más al usuario, hay que subir también el alcance del chorro.
+        /// </summary>
         private const float ApproachDistance = 2.2f;
 
         /// <summary>Altura del pivote del panel de extintores (queda a la altura de la mano).</summary>
@@ -40,15 +47,36 @@ namespace Extintores.EditorTools
             public FireClass Class;
             public Vector3 Fire;      // dónde se planta el fuego
             public float ApproachYaw; // hacia dónde mira el usuario al enfrentarlo
+            public float Approach;    // 0 = usar ApproachDistance
         }
 
         private static readonly Zone[] Zones =
         {
             new Zone { Class = FireClass.A, Fire = new Vector3(-8f, 0f,  3.5f), ApproachYaw = 270f },
-            new Zone { Class = FireClass.B, Fire = new Vector3( 8f, 0f,  3.5f), ApproachYaw =  90f },
+            // Clase B: la causa es un AUTO, ~4,5 m de largo. A 2,2 m del anchor del fuego el usuario
+            // aparecía prácticamente encima del paragolpes. 3,0 m lo deja afuera del auto y todavía
+            // dentro del alcance del chorro (3,6 m) — ver ApproachDistance.
+            new Zone { Class = FireClass.B, Fire = new Vector3( 8f, 0f,  3.5f), ApproachYaw =  90f, Approach = 3.0f },
             new Zone { Class = FireClass.C, Fire = new Vector3(-8f, 0f, -3.5f), ApproachYaw = 270f },
             new Zone { Class = FireClass.K, Fire = new Vector3( 8f, 0f, -3.5f), ApproachYaw =  90f },
         };
+
+        /// <summary>
+        /// Distancia de aproximación de una zona por nombre (<c>Zone_B</c>). La consulta
+        /// <c>SceneWiringFixer</c> para reacomodar los anchors del prefab ya generado sin tener que
+        /// rehacer el galpón entero.
+        /// </summary>
+        internal static bool TryGetApproach(string zoneName, out float distance)
+        {
+            foreach (var z in Zones)
+            {
+                if ($"Zone_{z.Class}" != zoneName) continue;
+                distance = z.Approach > 0f ? z.Approach : ApproachDistance;
+                return true;
+            }
+            distance = ApproachDistance;
+            return false;
+        }
 
         [MenuItem("Extintores/Build Warehouse Blockout", priority = 30)]
         public static void Build()
@@ -155,6 +183,17 @@ namespace Extintores.EditorTools
         /// prefab del fuego; <c>PlayerSpawn</c> y <c>PanelAnchor</c> los consume
         /// <see cref="FireStation"/>.
         /// </summary>
+        /// <summary>
+        /// Orientación del panel de extintores: <b>el yaw del usuario + 90°</b>.
+        ///
+        /// El panel va al COSTADO (a la derecha, <see cref="PanelSide"/>) y su cara legible es el −Z.
+        /// Orientarlo igual que el usuario —como estaba— apunta ese −Z hacia la espalda de quien lo
+        /// usa: había que darse vuelta entero para leerlo. Con +90° el −Z mira hacia el usuario, o
+        /// sea que basta con girar la cabeza a la derecha.
+        /// </summary>
+        private static Quaternion PanelRotation(float approachYaw) =>
+            Quaternion.Euler(0f, approachYaw + 90f, 0f);
+
         private static void BuildZone(Transform parent, Zone z)
         {
             var zone = new GameObject($"Zone_{z.Class}").transform;
@@ -166,15 +205,13 @@ namespace Extintores.EditorTools
 
             Anchor(zone, "FireAnchor", z.Fire, Quaternion.Euler(0f, z.ApproachYaw + 180f, 0f));
 
-            Vector3 spawn = z.Fire - forward * ApproachDistance;
+            TryGetApproach($"Zone_{z.Class}", out float approach);
+            Vector3 spawn = z.Fire - forward * approach;
             Anchor(zone, "PlayerSpawn", spawn, look);
 
-            // El panel va al costado del usuario. Su cara útil (rótulos + apertura del trigger) es
-            // el −Z, así que se orienta MIRANDO IGUAL que el usuario: su espalda queda hacia el
-            // fuego y su frente hacia la cara de quien lo usa.
             Anchor(zone, "PanelAnchor",
                 spawn + right * PanelSide + Vector3.up * PanelHeight,
-                Quaternion.Euler(0f, z.ApproachYaw, 0f));
+                PanelRotation(z.ApproachYaw));
 
             // Marca visual en el piso para ver el puesto desde lejos.
             var pad = GetMat($"Pad_{z.Class}", ClassColor(z.Class));
@@ -190,11 +227,12 @@ namespace Extintores.EditorTools
             var look = Quaternion.identity;
             Vector3 spawn = new Vector3(0f, 0f, -5.5f);
 
-            // Menú y panel comparten la convención: su cara legible es el −Z, así que se orientan
-            // igual que el usuario (yaw 0), no enfrentados a él.
+            // El menú está AL FRENTE, así que se orienta igual que el usuario (su cara legible −Z
+            // le queda de cara). El panel está AL COSTADO y por eso va a 90° — ver PanelRotation.
             Anchor(lobby, "PlayerSpawn", spawn, look);
             Anchor(lobby, "MenuAnchor", spawn + new Vector3(0f, 1.45f, 1.8f), look);
-            Anchor(lobby, "PanelAnchor", spawn + new Vector3(PanelSide, PanelHeight, 0f), look);
+            Anchor(lobby, "PanelAnchor", spawn + new Vector3(PanelSide, PanelHeight, 0f),
+                   PanelRotation(look.eulerAngles.y));
 
             var pad = GetMat("Pad_Lobby", new Color(0.25f, 0.45f, 0.70f));
             Box(lobby, "Pad", spawn + Vector3.up * 0.01f, new Vector3(2.4f, 0.02f, 2.4f), pad);
