@@ -242,11 +242,18 @@ MonoBehaviour:
   fireClass: 0
   maxHealth: 100
   healthPerParticle: 0.6
+  requireBaseAim: 1
+  baseAimHeight: 0.35
+  offBaseFactor: 0.3
   autoColliderRadius: 0.4
   autoColliderHeight: 0.4
   minScaleFactor: 0.35
   fireLight: {fileID: 0}
   fadeOutSeconds: 3
+  loopClip: {fileID: 8300000, guid: af0e33a1b1f847f4f80e106592282d96, type: 3}
+  maxVolume: 0.8
+  minDistance: 2
+  maxDistance: 18
 --- !u!114 &8063473604123702072
 MonoBehaviour:
   m_ObjectHideFlags: 0

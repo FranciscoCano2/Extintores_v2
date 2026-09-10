@@ -30,6 +30,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4945408911842587245}
+  - {fileID: 272906676749520418}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &4840004321356600710
@@ -86,10 +87,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects:
-    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: 0e7be016b09a72445b9080320cb0a93c, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 272906676749520418}
+    m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 0e7be016b09a72445b9080320cb0a93c, type: 3}
 --- !u!4 &4945408911842587245 stripped
@@ -103,7 +101,7 @@ PrefabInstance:
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 4945408911842587245}
+    m_TransformParent: {fileID: 9036320399566192136}
     m_Modifications:
     - target: {fileID: 1487363125332878862, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: InitialModule.startColor.maxColor.b
@@ -159,15 +157,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.01
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.010000002
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.010000002
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalPosition.x
@@ -175,19 +173,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.0122
+      value: 0.60000014
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.006
+      value: 1.2199998
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.7071067
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.7071068
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 8295591563862043288, guid: 98c5ce036f68d8941922e7541fb70887, type: 3}
       propertyPath: m_LocalRotation.y
@@ -261,11 +259,18 @@ MonoBehaviour:
   fireClass: 1
   maxHealth: 100
   healthPerParticle: 0.6
+  requireBaseAim: 1
+  baseAimHeight: 0.35
+  offBaseFactor: 0.3
   autoColliderRadius: 0.4
   autoColliderHeight: 0.4
   minScaleFactor: 0.35
   fireLight: {fileID: 0}
   fadeOutSeconds: 3
+  loopClip: {fileID: 8300000, guid: 447e97f44e7d0fd4eb6ddec82c319992, type: 3}
+  maxVolume: 0.8
+  minDistance: 2
+  maxDistance: 18
 --- !u!114 &2478161373993216938
 MonoBehaviour:
   m_ObjectHideFlags: 0

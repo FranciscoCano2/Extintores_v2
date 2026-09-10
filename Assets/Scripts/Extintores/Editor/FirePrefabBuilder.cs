@@ -26,21 +26,34 @@ namespace Extintores.EditorTools
         private const string VfxFolder = "Assets/Vefects/Free Fire VFX URP/Particles";
         private const string CausesFolder = "Assets/ThirdParty/FireCauses";
 
+        /// <summary>Crepitares del mismo pack de VFX. El auto suena grande; el tablero, chico.</summary>
+        private const string AudioFolder = "Assets/Vefects/Free Fire VFX URP/Audio";
+
         private struct ClassDef
         {
             public FireClass Class;
             public string VfxPrefab;   // .prefab dentro de VfxFolder
             public string CauseFbx;    // ruta relativa a CausesFolder (o null)
+            public string Sfx;         // .wav dentro de AudioFolder
             public Color TintHint;     // tinte orientativo (multiplica startColor si es color constante)
         }
 
         private static readonly ClassDef[] Defs =
         {
-            new ClassDef { Class = FireClass.A, VfxPrefab = "VFX_Fire_01_Medium.prefab",      CauseFbx = "Cardboard_Box/tripo_convert_9112ddbf-ab82-4c6a-a198-91410117ae59.fbx", TintHint = new Color(1.00f, 0.85f, 0.55f) },
-            new ClassDef { Class = FireClass.B, VfxPrefab = "VFX_Fire_01_Medium.prefab",       CauseFbx = "Sports_Car/sportcar.017.fbx",                                        TintHint = new Color(1.00f, 0.70f, 0.35f) },
-            new ClassDef { Class = FireClass.C, VfxPrefab = "VFX_Fire_01_Small.prefab",        CauseFbx = "Electrical_Breaker_Panel/Tz-ExteriorElectricBox2.fbx",               TintHint = new Color(0.75f, 0.85f, 1.00f) },
-            new ClassDef { Class = FireClass.K, VfxPrefab = "VFX_Fire_01_Medium_Smoke.prefab", CauseFbx = "Gas_Stove/gas_stove_main.fbx",                                       TintHint = new Color(1.00f, 0.60f, 0.30f) },
+            new ClassDef { Class = FireClass.A, VfxPrefab = "VFX_Fire_01_Medium.prefab",      CauseFbx = "Cardboard_Box/tripo_convert_9112ddbf-ab82-4c6a-a198-91410117ae59.fbx", Sfx = "SFX_FireMedium_L.wav", TintHint = new Color(1.00f, 0.85f, 0.55f) },
+            new ClassDef { Class = FireClass.B, VfxPrefab = "VFX_Fire_01_Medium.prefab",       CauseFbx = "Sports_Car/sportcar.017.fbx",                                        Sfx = "SFX_FireBig_L.wav",    TintHint = new Color(1.00f, 0.70f, 0.35f) },
+            new ClassDef { Class = FireClass.C, VfxPrefab = "VFX_Fire_01_Small.prefab",        CauseFbx = "Electrical_Breaker_Panel/Tz-ExteriorElectricBox2.fbx",               Sfx = "SFX_FireSmall_L.wav",  TintHint = new Color(0.75f, 0.85f, 1.00f) },
+            new ClassDef { Class = FireClass.K, VfxPrefab = "VFX_Fire_01_Medium_Smoke.prefab", CauseFbx = "Gas_Stove/gas_stove_main.fbx",                                       Sfx = "SFX_FireMedium_L.wav", TintHint = new Color(1.00f, 0.60f, 0.30f) },
         };
+
+        /// <summary>Clip de crepitar de una clase. Lo consulta también <c>FirePrefabRepair</c>.</summary>
+        internal static AudioClip SfxFor(FireClass fireClass)
+        {
+            foreach (var d in Defs)
+                if (d.Class == fireClass)
+                    return AssetDatabase.LoadAssetAtPath<AudioClip>($"{AudioFolder}/{d.Sfx}");
+            return null;
+        }
 
         [MenuItem("Extintores/Build Fire Prefabs (A B C K)")]
         public static void BuildAll()
@@ -79,6 +92,8 @@ namespace Extintores.EditorTools
             var so = new SerializedObject(fs);
             var prop = so.FindProperty("fireClass");
             if (prop != null) prop.enumValueIndex = (int)def.Class;
+            var clip = so.FindProperty("loopClip");
+            if (clip != null) clip.objectReferenceValue = SfxFor(def.Class);
             so.ApplyModifiedPropertiesWithoutUndo();
 
             ApplyTint(flame, def.TintHint);
