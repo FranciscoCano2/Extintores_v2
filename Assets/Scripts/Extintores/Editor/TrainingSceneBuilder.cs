@@ -107,21 +107,10 @@ namespace Extintores.EditorTools
         /// </summary>
         private static void FixTrackingOrigin(List<string> log)
         {
-            foreach (var mb in Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            {
-                if (mb == null || mb.GetType().Name != "OVRCameraRig") continue;
-
-                var so = new SerializedObject(mb);
-                var p = so.FindProperty("_trackingOriginType");
-                if (p != null && p.enumValueIndex != 1)
-                {
-                    p.enumValueIndex = 1; // FloorLevel
-                    so.ApplyModifiedProperties();
-                    log.Add("OVRCameraRig: tracking origin EyeLevel → FloorLevel.");
-                }
-                return;
-            }
-            log.Add("⚠ No encontré el OVRCameraRig para fijar el tracking origin.");
+            var result = OvrTrackingOrigin.Ensure(true, out string detail);
+            log.Add(result == OvrTrackingOrigin.Result.NoManager || result == OvrTrackingOrigin.Result.NoField
+                ? "⚠ " + detail
+                : detail);
         }
 
         // ---------------------------------------------------------------- puestos
