@@ -22,6 +22,9 @@ namespace Extintores.EditorTools
     {
         private const string DefaultFolder = "Assets/ThirdParty/FireCauses";
 
+        /// <summary>Tope de resolución para Quest. 2048 es el default de casi todos los packs.</summary>
+        private const int MaxTextureSize = 1024;
+
         [MenuItem("Extintores/Fix Sketchfab Textures (FireCauses)")]
         public static void FixDefault()
         {
@@ -39,7 +42,7 @@ namespace Extintores.EditorTools
             }
 
             var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { folder });
-            int normals = 0, linear = 0, srgb = 0;
+            int normals = 0, linear = 0, srgb = 0, shrunk = 0;
 
             foreach (var g in guids)
             {
@@ -47,6 +50,16 @@ namespace Extintores.EditorTools
                 var ti = AssetImporter.GetAtPath(path) as TextureImporter;
                 if (ti == null) continue;
                 string n = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+
+                // Tope de resolución: los packs vienen a 2048 y en Quest eso es memoria de video
+                // tirada. Sólo se toca el IMPORTADOR, así que el archivo original queda intacto y
+                // subir el tope de nuevo es gratis.
+                if (ti.maxTextureSize > MaxTextureSize)
+                {
+                    ti.maxTextureSize = MaxTextureSize;
+                    ti.SaveAndReimport();
+                    shrunk++;
+                }
 
                 if (IsNormal(n))
                 {
@@ -79,8 +92,9 @@ namespace Extintores.EditorTools
 
             AssetDatabase.Refresh();
             Debug.Log($"[TexFixer] {folder}: {normals} marcadas como Normal, {linear} pasadas a lineal, " +
-                      $"{srgb} a sRGB. Revisadas {guids.Length}. Ahora asigná los mapas al material URP/Lit " +
-                      "(BaseMap, Normal, Metallic, Occlusion, Emission).");
+                      $"{srgb} a sRGB, {shrunk} bajadas a {MaxTextureSize}px. Revisadas {guids.Length}. " +
+                      "Ahora asigná los mapas al material URP/Lit (BaseMap, Normal, Metallic, " +
+                      "Occlusion, Emission).");
         }
 
         private static string SelectedFolderOr(string fallback)
