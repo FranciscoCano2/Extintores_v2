@@ -3,6 +3,10 @@
 > Documento vivo. Aterriza el roadmap de la memoria en tareas concretas. Ver `CLAUDE.md`
 > para el detalle técnico de XR/OVR y `docs/` para futuros anexos.
 > Estado base: agosto 2026 (Unity 6000.5.4f1, URP 17.5, OpenXR multimodal, Quest).
+>
+> 👉 **Este documento cubre el DISEÑO DE FONDO** (clases de fuego, agentes, matriz, pared de
+> recarga). El **estado actual del juego** —menú de modos, puestos, galpón, botones accionados por
+> el chorro— vive en [`PLAN-ejercicio-entrenamiento.md`](PLAN-ejercicio-entrenamiento.md).
 
 ## 1. Qué ya está resuelto (código)
 

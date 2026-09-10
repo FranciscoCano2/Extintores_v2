@@ -5,6 +5,25 @@ Usa el modo **Multimodal (Simultaneous Hands and Controllers)** del Meta XR SDK:
 controles rastreados a la vez, con transición automática según el control esté en la mano
 o soltado.
 
+## Documentación (leer ANTES de tocar nada)
+
+Este archivo cubre el **entorno y el rig XR**. El diseño y el estado del juego están en `docs/`:
+
+| Documento | Qué contiene |
+|---|---|
+| [`docs/PLAN-ejercicio-entrenamiento.md`](docs/PLAN-ejercicio-entrenamiento.md) | **Estado actual.** Menú de modos, puestos, galpón, botones por chorro. Arquitectura, qué está hecho y qué falta. |
+| [`docs/PLAN-fuegos-y-extintores.md`](docs/PLAN-fuegos-y-extintores.md) | Diseño de fondo: clases de fuego A/B/C/K, agentes, matriz de efectividad, pared de recarga. |
+| [`docs/CREDITS.md`](docs/CREDITS.md) | Licencias de los assets de terceros (varios CC-BY: hay que acreditar). |
+
+**La escena del juego es `Assets/Scenes/Training.unity`** (primera en Build Settings).
+`SampleScene.unity` quedó como sandbox y está deshabilitada en el build.
+
+⚠️ **Ante "el código está pero no funciona", correr `Extintores ▸ Validate Setup` ANTES de tocar
+código.** El cableado de escena falla en silencio: los bugs de agosto 2026 (manager duplicado,
+componente equivocado, sensor sin `isTrigger`, prefab desactualizado) no daban ni error de
+compilación ni excepción, simplemente no pasaba nada. Para cambios de escena usar un editor tool
+(`SerializedObject` + `Undo`), nunca editar el YAML a mano — eso fue justamente la causa raíz.
+
 ## Entorno
 
 | Ítem | Valor |
