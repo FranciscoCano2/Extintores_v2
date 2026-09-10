@@ -37,6 +37,15 @@ namespace Extintores
         public event System.Action<FireSource, int> FireExtinguished; // (fuego apagado, quedan)
         public event System.Action AllFiresExtinguished;
 
+        /// <summary>
+        /// Se dispara al arrancar una etapa con <see cref="BeginSession"/>. Parámetro: cuántos
+        /// fuegos entran. Lo escucha <see cref="TrainingManager"/> para arrancar el cronómetro:
+        /// con <see cref="autoCollectOnStart"/> apagado —que es como debe estar en el ejercicio—
+        /// al hacer <c>Start()</c> todavía no hay ningún fuego registrado, así que el reloj no
+        /// tiene de dónde saber que empezó.
+        /// </summary>
+        public event System.Action<int> SessionBegan;
+
         // --- API pública de estado ---
         public int TotalFires { get; private set; }
         public int RemainingFires { get; private set; }
@@ -78,10 +87,11 @@ namespace Extintores
             RemainingFires = 0;
             _completed = false;
 
-            if (fires == null) return;
-            foreach (var f in fires) Register(f);
+            if (fires != null)
+                foreach (var f in fires) Register(f);
 
             Debug.Log($"[FireManager] Etapa iniciada con {TotalFires} fuego(s).");
+            SessionBegan?.Invoke(TotalFires);
         }
 
         /// <summary>Registra un fuego para el conteo. Ignora nulos, repetidos y ya apagados.</summary>

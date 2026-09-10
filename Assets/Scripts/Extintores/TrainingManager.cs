@@ -43,6 +43,9 @@ namespace Extintores
         public event System.Action WrongAgent;
         public event System.Action Success;
 
+        /// <summary>Arrancó una etapa: el HUD lo usa para bajar el cartel de "nivel superado".</summary>
+        public event System.Action Started;
+
         // --- Datos para el HUD ---
         public int Remaining => fireManager != null ? fireManager.RemainingFires : 0;
         public int Total => fireManager != null ? fireManager.TotalFires : 0;
@@ -70,16 +73,35 @@ namespace Extintores
                 f.WrongAgentUsed += HandleWrong;
             }
 
-            if (fireManager != null) fireManager.AllFiresExtinguished += HandleSuccess;
+            if (fireManager != null)
+            {
+                fireManager.AllFiresExtinguished += HandleSuccess;
+                fireManager.SessionBegan += HandleSessionBegan;
+            }
 
-            TimerRunning = Total > 0; // arranca el reloj si hay fuegos
+            // Sólo sirve para la escena sandbox, donde el FireManager sí auto-recoge los fuegos al
+            // iniciar. En el ejercicio Total vale 0 acá (los fuegos los elige TrainingSession
+            // después) y el reloj lo arranca HandleSessionBegan.
+            TimerRunning = Total > 0;
         }
 
         private void OnDestroy()
         {
             foreach (var f in _fires)
                 if (f != null) f.WrongAgentUsed -= HandleWrong;
-            if (fireManager != null) fireManager.AllFiresExtinguished -= HandleSuccess;
+            if (fireManager != null)
+            {
+                fireManager.AllFiresExtinguished -= HandleSuccess;
+                fireManager.SessionBegan -= HandleSessionBegan;
+            }
+        }
+
+        /// <summary>Etapa nueva: cronómetro a cero y en marcha.</summary>
+        private void HandleSessionBegan(int fires)
+        {
+            Elapsed = 0f;
+            TimerRunning = fires > 0;
+            Started?.Invoke();
         }
 
         private void Update()
