@@ -27,6 +27,7 @@ namespace Extintores.EditorTools
     public static class SceneWiringFixer
     {
         private const string StationPrefabPath = "Assets/Prefabs/ExtinguisherStation.prefab";
+        private const string WarehousePrefabPath = "Assets/Prefabs/Warehouse_Blockout.prefab";
         private const string WrongClipPath = "Assets/Extintores/Audio/SFX_WrongAgent.wav";
         private const string SensorName = "SwapSensor";
         private const string HudName = "TrainingHud";
@@ -63,6 +64,7 @@ namespace Extintores.EditorTools
             }
 
             CheckLayers();
+            FixTrackingOrigin(apply);
 
             var spray = Object.FindFirstObjectByType<ExtinguisherSpray>(FindObjectsInactive.Include);
             var swappable = Object.FindFirstObjectByType<ExtinguisherSwappable>(FindObjectsInactive.Include);
@@ -79,7 +81,9 @@ namespace Extintores.EditorTools
             var training = FixTrainingManager(apply, fireManager, spray);
             FixSwapSensor(apply, swappable);
             FixSwappableWiring(apply, swappable, spray);
+            FixLaser(apply, spray);
             FixStationPrefab(apply, station);
+            FixPanelAnchors(apply);
             FixHud(apply, training);
             CheckFires(spray);
             CheckTrainingSetup();
@@ -124,6 +128,22 @@ namespace Extintores.EditorTools
                 if (LayerMask.NameToLayer(n) >= 0) Ok($"Layer '{n}' = {LayerMask.NameToLayer(n)}.");
                 else Problem($"Falta la layer '{n}' (Project Settings ▸ Tags and Layers). " +
                              "Sin ella el chorro no colisiona / el swap no dispara.");
+            }
+        }
+
+        // ------------------------------------------------------------------ tracking origin
+        /// <summary>
+        /// El rig tiene que estar en FloorLevel o el usuario aparece con los ojos al ras del piso.
+        /// Se chequea acá —y no sólo en el builder— porque la escena ya está construida y guardada:
+        /// nadie debería tener que rehacerla entera para arreglar un enum.
+        /// </summary>
+        private static void FixTrackingOrigin(bool apply)
+        {
+            switch (OvrTrackingOrigin.Ensure(apply, out string detail))
+            {
+                case OvrTrackingOrigin.Result.AlreadyFloor: Ok(detail); break;
+                case OvrTrackingOrigin.Result.Fixed: Fixed(detail); break;
+                default: Problem(detail); break;
             }
         }
 
@@ -370,14 +390,265 @@ namespace Extintores.EditorTools
                     Problem("ExtinguisherSwappable.spray sin asignar (depende de FindFirstObjectByType en Awake).");
                 if (pLabel != null && pLabel.objectReferenceValue == null && label != null)
                     Problem("ExtinguisherSwappable.labelRenderer sin asignar: la etiqueta no cambiaría al hacer swap.");
+
+                var pBody = so.FindProperty("bodyRenderer");
+                if (pBody != null && pBody.objectReferenceValue == null)
+                    Problem("ExtinguisherSwappable.bodyRenderer sin asignar: el tanque no cambiaría " +
+                            "de color al cambiar de tipo de extintor.");
+                var pTint = so.FindProperty("tintBody");
+                if (pTint != null && !pTint.boolValue)
+                    Problem("ExtinguisherSwappable.tintBody está apagado: sólo cambiaría la etiqueta.");
+
+                FixBodyMaterial(false, sw);
                 return;
             }
 
             int n = SetRef(so, "spray", spray) + SetRef(so, "labelRenderer", label);
+            n += SetRef(so, "bodyRenderer", FindBodyRenderer(sw));
+
+            var tint = so.FindProperty("tintBody");
+            if (tint != null && !tint.boolValue) { tint.boolValue = true; n++; }
+
             so.ApplyModifiedProperties();
 
-            if (n > 0) Fixed($"ExtinguisherSwappable cableado ({n} referencia(s)).");
+            if (n > 0) Fixed($"ExtinguisherSwappable cableado ({n} referencia(s)), tinte del cuerpo activo.");
             else Ok("ExtinguisherSwappable ya estaba cableado.");
+
+            FixBodyMaterial(true, sw);
+        }
+
+        /// <summary>
+        /// El cuerpo del tanque: el renderer más grande, salteando el visor de vidrio, la etiqueta y
+        /// las partículas. Se elige por tamaño y no por nombre para que siga andando si mañana se
+        /// cambia el modelo del extintor por otro.
+        /// </summary>
+        private static Renderer FindBodyRenderer(ExtinguisherSwappable sw)
+        {
+            Renderer best = null;
+            float bestSize = 0f;
+
+            foreach (var r in sw.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r is ParticleSystemRenderer || r is LineRenderer) continue;
+
+                string n = r.gameObject.name;
+                if (n.StartsWith("Label") || n.Contains("Glass")) continue;
+
+                float size = r.bounds.size.sqrMagnitude;
+                if (size > bestSize) { bestSize = size; best = r; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// El tanque tiene que usar el material de cuerpo con la textura DESATURADA para que
+        /// teñirlo dé el color del agente. Con la textura roja original, azul × rojo = negro: el
+        /// extintor de agua saldría sucio en vez de azul, y nada lo explicaría.
+        /// </summary>
+        private static void FixBodyMaterial(bool apply, ExtinguisherSwappable sw)
+        {
+            var body = FindBodyRenderer(sw);
+            if (body == null) { Problem("No encontré el renderer del cuerpo del tanque."); return; }
+
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(ExtinguisherBodyTool.BodyMaterial);
+            if (mat == null)
+            {
+                Problem($"Falta '{ExtinguisherBodyTool.BodyMaterial}': el tanque no puede pintarse " +
+                        "del color de su tipo. Corré 'Extintores ▸ Build Extinguisher Body Material'.");
+                return;
+            }
+
+            if (body.sharedMaterial == mat) { Ok("El tanque usa el material tintable."); return; }
+
+            if (!apply)
+            {
+                Problem($"El cuerpo del tanque usa '{(body.sharedMaterial != null ? body.sharedMaterial.name : "ninguno")}' " +
+                        "en vez del material tintable: el color por tipo de extintor no se vería.");
+                return;
+            }
+
+            Undo.RecordObject(body, "Material del tanque");
+            body.sharedMaterial = mat;
+            EditorUtility.SetDirty(body);
+            Fixed($"Cuerpo del tanque ('{body.gameObject.name}') pasado al material tintable.");
+        }
+
+        // ------------------------------------------------------------------ láser
+        /// <summary>
+        /// Puntero láser en la punta de la boquilla, mismo objeto que el chorro: así apuntar a un
+        /// botón y apuntar a un fuego son el mismo gesto, con el mismo origen y dirección.
+        /// </summary>
+        private static void FixLaser(bool apply, ExtinguisherSpray spray)
+        {
+            var laser = Object.FindFirstObjectByType<LaserPointer>(FindObjectsInactive.Include);
+            if (laser != null) { Ok($"Puntero láser en '{Path(laser.transform)}'."); return; }
+
+            if (spray == null)
+            {
+                Problem("No hay LaserPointer y tampoco ExtinguisherSpray donde ponerlo.");
+                return;
+            }
+
+            if (!apply)
+            {
+                Problem("No hay ningún LaserPointer: los botones se accionan con el chorro, cuyo " +
+                        "cono pega en varios carteles a la vez y hace imposible saber cuál se elige.");
+                return;
+            }
+
+            Undo.AddComponent<LaserPointer>(spray.gameObject);
+            Fixed($"LaserPointer agregado a '{Path(spray.transform)}' (la punta de la boquilla).");
+        }
+
+        // ------------------------------------------------------------------ anchors del panel
+        /// <summary>
+        /// Repara los anchors de cada zona del galpón, sin rehacerlo:
+        /// <list type="bullet">
+        ///   <item><b>Giro del panel</b>: 90° respecto del <c>PlayerSpawn</c> hermano. El panel va al
+        ///         costado y su cara legible es el −Z; orientado igual que el usuario, ese −Z apunta
+        ///         a su espalda y hay que darse vuelta entero para leerlo.</item>
+        ///   <item><b>Distancia de aproximación</b>: cuánto se separa el <c>PlayerSpawn</c> del
+        ///         fuego. En clase B la causa es un auto de ~4,5 m y el usuario aparecía encima del
+        ///         paragolpes.</item>
+        /// </list>
+        ///
+        /// Se edita el ASSET con <c>LoadPrefabContents</c> → <c>SaveAsPrefabAsset</c>, no
+        /// re-ejecutando <c>WarehouseBuilder</c>: rehacer el prefab desde una raíz nueva le cambia
+        /// los fileID a los anchors y deja los <see cref="FireStation"/> de la escena apuntando a
+        /// la nada.
+        /// </summary>
+        private static void FixPanelAnchors(bool apply)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(WarehousePrefabPath);
+            if (asset == null)
+            {
+                Ok($"(aviso) No existe '{WarehousePrefabPath}': nada que revisar.");
+                return;
+            }
+
+            int turns = 0, moves = 0;
+            foreach (var zone in Zones(asset.transform))
+            {
+                if (NeedsTurn(zone, out _)) turns++;
+                if (NeedsMove(zone, out _, out _)) moves++;
+            }
+
+            if (turns == 0 && moves == 0)
+            {
+                Ok("Los anchors del galpón están bien: panel de cara al usuario y distancias correctas.");
+                return;
+            }
+
+            if (!apply)
+            {
+                if (turns > 0)
+                    Problem($"{turns} zona(s) con el PanelAnchor orientado igual que el usuario: el " +
+                            "panel queda de costado mirando hacia atrás y hay que darse vuelta para usarlo.");
+                if (moves > 0)
+                    Problem($"{moves} zona(s) con el PlayerSpawn a una distancia del fuego distinta " +
+                            "de la que define WarehouseBuilder (clase B aparecía encima del auto).");
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(WarehousePrefabPath);
+            try
+            {
+                int t = 0, m = 0;
+                foreach (var zone in Zones(contents.transform))
+                {
+                    // Primero mover y después girar: el giro se calcula contra el spawn, que la
+                    // mudanza no rota, así que el orden no cambia el resultado — pero sí importa
+                    // que el panel se mueva junto con el spawn (ver MoveZone).
+                    if (NeedsMove(zone, out float target, out Vector3 delta)) { MoveZone(zone, delta); m++; }
+                    if (NeedsTurn(zone, out float spawnYaw))
+                    {
+                        zone.Panel.localRotation = Quaternion.Euler(0f, spawnYaw + 90f, 0f);
+                        t++;
+                    }
+                }
+
+                if (t > 0 || m > 0)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(contents, WarehousePrefabPath);
+                    if (t > 0) Fixed($"{t} PanelAnchor girados 90° en '{WarehousePrefabPath}'.");
+                    if (m > 0) Fixed($"{m} PlayerSpawn (y su panel) reubicados a la distancia correcta del fuego.");
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        /// <summary>Anchors de un puesto. <c>Fire</c> es null en el Lobby, que no tiene fuego.</summary>
+        private struct ZoneAnchors
+        {
+            public string Name;
+            public Transform Fire, Spawn, Panel;
+        }
+
+        /// <summary>
+        /// Todo grupo que tenga PlayerSpawn + PanelAnchor: las 4 zonas <b>y el Lobby</b>. El lobby
+        /// también tiene el panel al costado, así que también necesita el giro de 90°.
+        /// </summary>
+        private static System.Collections.Generic.IEnumerable<ZoneAnchors> Zones(Transform root)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                var spawn = t.Find("PlayerSpawn");
+                var panel = t.Find("PanelAnchor");
+                if (spawn == null || panel == null) continue;
+
+                yield return new ZoneAnchors
+                {
+                    Name = t.name,
+                    Fire = t.Find("FireAnchor"),
+                    Spawn = spawn,
+                    Panel = panel,
+                };
+            }
+        }
+
+        /// <summary>
+        /// Aleja o acerca el spawn del fuego. El panel se mueve <b>el mismo vector</b>: está definido
+        /// como un offset lateral del usuario, así que si sólo se moviera el spawn quedaría lejos y
+        /// fuera de alcance.
+        /// </summary>
+        private static void MoveZone(ZoneAnchors zone, Vector3 delta)
+        {
+            zone.Spawn.localPosition += delta;
+            zone.Panel.localPosition += delta;
+        }
+
+        private static bool NeedsMove(ZoneAnchors zone, out float target, out Vector3 delta)
+        {
+            delta = Vector3.zero;
+            target = 0f;
+            if (zone.Fire == null) return false; // el Lobby no tiene fuego del que alejarse
+            if (!WarehouseBuilder.TryGetApproach(zone.Name, out target)) return false;
+
+            Vector3 fire = zone.Fire.localPosition;
+            Vector3 spawn = zone.Spawn.localPosition;
+            Vector3 flat = new Vector3(spawn.x - fire.x, 0f, spawn.z - fire.z);
+            float current = flat.magnitude;
+            if (current < 0.01f) return false; // spawn encima del fuego: no sé hacia dónde alejarlo
+            if (Mathf.Abs(current - target) < 0.05f) return false;
+
+            Vector3 wanted = new Vector3(fire.x, spawn.y, fire.z) + flat.normalized * target;
+            delta = wanted - spawn;
+            return true;
+        }
+
+        /// <summary>
+        /// Un PanelAnchor está mal si mira casi igual que el PlayerSpawn. Se compara contra el spawn
+        /// —y no contra un yaw fijo— para que sirva en las 4 zonas, que se enfrentan en direcciones
+        /// distintas. Idempotente: a 90° ya no toca nada.
+        /// </summary>
+        private static bool NeedsTurn(ZoneAnchors zone, out float spawnYaw)
+        {
+            spawnYaw = zone.Spawn.localRotation.eulerAngles.y;
+            float delta = Mathf.DeltaAngle(zone.Panel.localRotation.eulerAngles.y, spawnYaw);
+            return Mathf.Abs(delta) < 45f;
         }
 
         // ------------------------------------------------------------------ Station
@@ -388,6 +659,8 @@ namespace Extintores.EditorTools
 
             var asset = AssetDatabase.LoadAssetAtPath<GameObject>(StationPrefabPath);
             if (asset == null) { Problem($"No se encontró '{StationPrefabPath}'."); return; }
+
+            CheckStationIsCurrent(asset);
 
             if (asset.GetComponent<BayHighlighter>() != null) { Ok("El prefab de la pared ya tiene BayHighlighter."); return; }
 
@@ -427,23 +700,12 @@ namespace Extintores.EditorTools
 
                 var go = new GameObject(HudName);
                 Undo.RegisterCreatedObjectUndo(go, "Crear TrainingHud");
-
-                // Pegado al ojo para que el cartel acompañe la mirada; si no hay rig queda suelto.
-                var anchor = FindDeep("CenterEyeAnchor");
-                if (anchor != null)
-                {
-                    go.transform.SetParent(anchor, false);
-                    go.transform.localPosition = new Vector3(-0.35f, -0.20f, 1.2f);
-                    go.transform.localRotation = Quaternion.identity;
-                    Fixed($"'{HudName}' creado bajo 'CenterEyeAnchor' (1.2 m al frente).");
-                }
-                else
-                {
-                    go.transform.position = new Vector3(0f, 1.6f, 2f);
-                    Fixed($"'{HudName}' creado suelto en la escena (no encontré CenterEyeAnchor): posicionalo a mano.");
-                }
+                go.transform.position = new Vector3(0f, 1.3f, 1.5f);
                 hud = Undo.AddComponent<TrainingHud>(go);
+                Fixed($"'{HudName}' creado.");
             }
+
+            FixHudPlacement(apply, hud);
 
             if (!apply)
             {
@@ -463,6 +725,83 @@ namespace Extintores.EditorTools
             else Ok("TrainingHud ya estaba cableado.");
         }
 
+        /// <summary>
+        /// Saca el HUD de la cabeza y le pone <see cref="BodyLockedPanel"/>.
+        ///
+        /// Colgado del <c>CenterEyeAnchor</c> el cartel queda clavado a la cara: gira exacto con la
+        /// cabeza, siempre en el mismo rincón del ojo, y no hay forma de mirarlo de frente. Suelto en
+        /// el mundo + seguimiento con zona muerta, te espera quieto donde lo dejaste y sólo se
+        /// reacomoda cuando de verdad te diste vuelta.
+        /// </summary>
+        private static void FixHudPlacement(bool apply, TrainingHud hud)
+        {
+            var eye = FindDeep("CenterEyeAnchor");
+            var t = hud.transform;
+            bool headParented = eye != null && t.IsChildOf(eye);
+            var follower = hud.GetComponent<BodyLockedPanel>();
+
+            if (!apply)
+            {
+                if (headParented)
+                    Problem($"'{hud.name}' cuelga del CenterEyeAnchor: el cartel queda pegado a la " +
+                            "cara, gira con la cabeza y no se puede leer.");
+                if (follower == null)
+                    Problem($"'{hud.name}' no tiene BodyLockedPanel: o queda fijo en el galpón, o " +
+                            "clavado a la cabeza. Debería seguirte con zona muerta.");
+                if (!headParented && follower != null) Ok("TrainingHud suelto y con seguimiento body-locked.");
+                return;
+            }
+
+            if (headParented)
+            {
+                Undo.SetTransformParent(t, null, "Sacar el HUD de la cabeza");
+                Fixed($"'{hud.name}' desacoplado del CenterEyeAnchor.");
+            }
+
+            if (follower == null)
+            {
+                follower = Undo.AddComponent<BodyLockedPanel>(hud.gameObject);
+                Fixed($"BodyLockedPanel agregado a '{hud.name}' (te sigue con zona muerta, no pegado a la cara).");
+            }
+
+            var so = new SerializedObject(follower);
+            if (SetRef(so, "head", eye) > 0)
+            {
+                so.ApplyModifiedProperties();
+                Fixed("BodyLockedPanel.head cableado al CenterEyeAnchor.");
+            }
+        }
+
+        /// <summary>
+        /// Detecta un <c>ExtinguisherStation.prefab</c> viejo. No lo repara: rehacerlo es correr
+        /// <b>Extintores ▸ Build Extinguisher Wall</b>, que sobre-escribe el asset entero, y eso es
+        /// decisión del usuario, no un efecto colateral de pedir un diagnóstico.
+        ///
+        /// Existe porque achicar el panel en el código de <c>WallBuilder</c> NO achica el asset ya
+        /// generado: el prefab siguió midiendo 2,45 × 1,3 m durante toda una prueba en visor mientras
+        /// el plan lo daba por hecho. Nada lo delataba salvo abrir el YAML.
+        /// </summary>
+        private static void CheckStationIsCurrent(GameObject asset)
+        {
+            var board = FindChild(asset.transform, "Backboard");
+            if (board != null && board.localScale.x > 1.5f)
+                Problem($"El panel de extintores mide {board.localScale.x:0.##} × {board.localScale.y:0.##} m: " +
+                        "es el asset viejo, el código de WallBuilder ya genera uno de ~1,1 × 0,62 m. " +
+                        "Corré 'Extintores ▸ Build Extinguisher Wall' para regenerarlo.");
+
+            var bays = asset.GetComponentsInChildren<ExtinguisherBay>(true);
+            int withSelector = 0;
+            foreach (var b in bays)
+                if (b.GetComponentInChildren<SprayButton>(true) != null) withSelector++;
+
+            if (bays.Length > 0 && withSelector < bays.Length)
+                Problem($"{bays.Length - withSelector} de {bays.Length} bahías no tienen botón " +
+                        "'Selector': sólo se puede cambiar de extintor metiendo el tanque en la bahía, " +
+                        "no apuntándole el chorro. Corré 'Extintores ▸ Build Extinguisher Wall'.");
+            else if (bays.Length > 0)
+                Ok($"Las {bays.Length} bahías tienen botón de chorro.");
+        }
+
         // ------------------------------------------------------------------ fuegos
         private static void CheckFires(ExtinguisherSpray spray)
         {
@@ -478,6 +817,26 @@ namespace Extintores.EditorTools
             var parts = new List<string>();
             foreach (var kv in byClass) parts.Add($"{kv.Key}×{kv.Value}");
             Ok($"{fires.Length} fuego(s): {string.Join(", ", parts)}.");
+
+            // Los dos defectos que repara 'Fix Fire Prefabs'. No se arreglan acá: viven en el
+            // prefab, no en la escena.
+            int mute = 0, nested = 0;
+            foreach (var f in fires)
+            {
+                if (new SerializedObject(f).FindProperty("loopClip")?.objectReferenceValue == null) mute++;
+
+                // La llama tiene que colgar de la raíz del prefab del fuego ('Fire_A'…), no de la
+                // causa. Se compara por nombre y no por profundidad: el prefab está anidado dentro
+                // de Station_X > TrainingSetup, así que contar padres no distingue nada.
+                var parent = f.transform.parent;
+                if (parent != null && parent.name != $"Fire_{f.Class}") nested++;
+            }
+            if (mute > 0)
+                Problem($"{mute} fuego(s) sin crepitar asignado. Corré 'Extintores ▸ Fix Fire Prefabs'.");
+            if (nested > 0)
+                Problem($"{nested} fuego(s) con la llama colgando de la causa en vez de la raíz " +
+                        "(hereda su escala: es el bug de 'la B gigante'). " +
+                        "Corré 'Extintores ▸ Fix Fire Prefabs'.");
 
             foreach (FireClass fc in System.Enum.GetValues(typeof(FireClass)))
                 if (!byClass.ContainsKey(fc))
