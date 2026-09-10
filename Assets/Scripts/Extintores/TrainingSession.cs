@@ -46,8 +46,9 @@ namespace Extintores
         [Header("Botón de avance")]
         [Tooltip("Botón 'Continuar', oculto hasta que se apaga el fuego.")]
         [SerializeField] private SprayButton continueButton;
-        [Tooltip("Dónde aparece el botón respecto del usuario: X lateral, Y altura, Z al frente.")]
-        [SerializeField] private Vector3 continueOffset = new Vector3(-0.55f, 1.3f, 1.6f);
+        [Tooltip("Dónde aparece el botón respecto de la CABEZA: X lateral, Y sobre/bajo la línea de " +
+                 "los ojos, Z al frente.")]
+        [SerializeField] private Vector3 continueOffsetFromHead = new Vector3(0f, -0.25f, 1.5f);
 
         [Header("Umbral del tutorial")]
         [Tooltip("Efectividad mínima para que una bahía quede habilitada en modo tutorial.")]
@@ -274,26 +275,44 @@ namespace Extintores
         }
 
         /// <summary>
-        /// Muestra u oculta "Continuar". Al mostrarlo lo planta delante del puesto actual: el
-        /// usuario ya está ubicado ahí, así que el botón aparece a la vista sin necesidad de un
-        /// anchor por zona. Se orienta con la cara legible (−Z) hacia el usuario.
+        /// Muestra u oculta "Continuar". Al mostrarlo lo planta <b>delante de la cabeza</b>, no en
+        /// un punto fijo derivado del <c>PlayerSpawn</c> del puesto.
+        ///
+        /// ⚠ Esa era la causa de "el botón Continuar no responde a ningún estímulo": el usuario se
+        /// gira dentro del guardian (para usar el panel de extintores, sin ir más lejos), y un botón
+        /// clavado a 1,6 m del anchor le quedaba <b>a la espalda</b>. Nunca lo veía, así que parecía
+        /// muerto. Anclado a la mirada aparece siempre a la vista.
+        ///
+        /// Se orienta con la cara legible (−Z) hacia el usuario y sin inclinación: sólo yaw.
         /// </summary>
         private void SetContinueVisible(bool visible)
         {
             if (continueButton == null) return;
 
-            if (visible)
+            if (visible) PlaceContinueInView();
+            continueButton.gameObject.SetActive(visible);
+        }
+
+        private void PlaceContinueInView()
+        {
+            // Fallback al anchor del puesto sólo si no hay cabeza que consultar.
+            Transform reference = centerEye;
+            Vector3 offset = continueOffsetFromHead;
+            if (reference == null)
             {
-                var at = CurrentStation != null ? CurrentStation.PlayerSpawn : lobbySpawn;
-                if (at != null)
+                reference = CurrentStation != null ? CurrentStation.PlayerSpawn : lobbySpawn;
+                if (reference == null)
                 {
-                    continueButton.transform.SetPositionAndRotation(
-                        at.position + at.rotation * continueOffset,
-                        Quaternion.Euler(0f, at.eulerAngles.y, 0f));
+                    Debug.LogWarning("[TrainingSession] No tengo cabeza ni spawn para ubicar " +
+                                     "'Continuar': queda donde estaba.");
+                    return;
                 }
+                offset.y += 1.6f; // el spawn está en el piso; la cabeza no
             }
 
-            continueButton.gameObject.SetActive(visible);
+            var rot = Quaternion.Euler(0f, reference.eulerAngles.y, 0f);
+            continueButton.transform.SetPositionAndRotation(reference.position + rot * offset, rot);
+            Debug.Log($"[TrainingSession] 'Continuar' a la vista en {continueButton.transform.position}.");
         }
 
         private FireStation FindStation(FireClass fireClass)
