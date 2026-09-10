@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace Extintores
 {
     /// <summary>
@@ -24,6 +26,45 @@ namespace Extintores
         DryChemABC,   // Polvo químico seco ABC (multipropósito, el rojo típico)
         DryChemBC,    // Polvo químico seco BC
         WetChemical,  // Químico húmedo — K (cocina)
+    }
+
+    /// <summary>
+    /// Aspecto del cuerpo de cada tipo de extintor: color y cuánto de metal tiene.
+    ///
+    /// Es la <b>fuente única</b>: la usan la pared de recarga para pintar cada bahía
+    /// (<c>WallBuilder</c>) y el tanque de la mano para teñirse al cambiar de agente
+    /// (<see cref="ExtinguisherSwappable"/>). Tenerlo duplicado en el builder hacía que el panel y
+    /// el extintor pudieran discrepar sin que nada lo delatara.
+    ///
+    /// ⚠️ <b>Es una paleta didáctica, no una norma.</b> Ninguna norma pinta el cuerpo entero así:
+    /// IRAM (Argentina) y NFPA usan cuerpo rojo con etiqueta, y BS EN 3 usa rojo con una banda de
+    /// color. Acá se pinta el cuerpo completo porque en VR el color se lee de un vistazo y a 3 m
+    /// una etiqueta no se distingue — que es justo lo que el ejercicio quiere enseñar. La excepción
+    /// es el de clase K: el químico húmedo se fabrica en <b>acero inoxidable</b>, y ese sí es su
+    /// aspecto real.
+    /// </summary>
+    public static class AgentColor
+    {
+        public static Color Of(AgentType agent) => agent switch
+        {
+            AgentType.Water => new Color(0.00f, 0.37f, 0.70f), // azul
+            AgentType.Foam => new Color(0.85f, 0.72f, 0.42f), // crema
+            AgentType.CO2 => new Color(0.10f, 0.10f, 0.11f), // negro
+            AgentType.DryChemABC => new Color(0.78f, 0.10f, 0.10f), // rojo (el multipropósito típico)
+            AgentType.DryChemBC => new Color(0.72f, 0.30f, 0.10f), // rojo anaranjado
+            _ => new Color(0.80f, 0.82f, 0.85f),                    // WetChemical: acero inoxidable
+        };
+
+        /// <summary>
+        /// Cuánto metal tiene el cuerpo (0 = pintado, 1 = metal desnudo). Sin esto el de clase K
+        /// sale gris claro mate, que se lee como "pintado de gris" y no como acero inoxidable.
+        /// </summary>
+        public static float MetallicOf(AgentType agent) =>
+            agent == AgentType.WetChemical ? 0.85f : 0.05f;
+
+        /// <summary>Los pintados son más brillantes que el acero cepillado del de cocina.</summary>
+        public static float SmoothnessOf(AgentType agent) =>
+            agent == AgentType.WetChemical ? 0.62f : 0.45f;
     }
 
     /// <summary>

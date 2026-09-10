@@ -21,9 +21,10 @@ namespace Extintores
         [Tooltip("Renderer del cuerpo del tanque a teñir según el tipo (opcional).")]
         [SerializeField] private Renderer bodyRenderer;
 
-        [Tooltip("Si está activo, tiñe el cuerpo con el color de la bahía. Dejalo apagado si el " +
-                 "tanque ya tiene su color por textura y no querés pisarlo.")]
-        [SerializeField] private bool tintBody = false;
+        [Tooltip("Si está activo, tiñe el cuerpo con el color del tipo de extintor. Necesita que el " +
+                 "material del tanque use la textura DESATURADA (ver 'Extintores ▸ Build " +
+                 "Extinguisher Body Material'): teñir sobre la roja original da negro.")]
+        [SerializeField] private bool tintBody = true;
 
         [Tooltip("Renderer de la etiqueta/calco cuyo mapa se reemplaza según el tipo (opcional).")]
         [SerializeField] private Renderer labelRenderer;
@@ -39,19 +40,40 @@ namespace Extintores
             if (spray == null) spray = FindFirstObjectByType<ExtinguisherSpray>();
         }
 
-        /// <summary>Aplica un tipo de extintor: agente + (opcional) color de cuerpo + etiqueta.</summary>
-        public void SetAgent(AgentType agent, Color bodyColor, Texture2D label)
+        /// <summary>
+        /// Pinta el tanque del color que le corresponde al agente con el que arranca. Sin esto el
+        /// extintor sale del color "crudo" del material hasta que el usuario toca una bahía, que es
+        /// justo lo contrario de lo que se quiere enseñar.
+        /// </summary>
+        private void Start() => ApplyBodyColor(CurrentAgent);
+
+        /// <summary>
+        /// Aplica un tipo de extintor: agente + aspecto del cuerpo + etiqueta.
+        ///
+        /// El aspecto NO se recibe como parámetro: se resuelve por <paramref name="agent"/> contra
+        /// <see cref="AgentColor"/>. Pasarlo desde la bahía era otro lugar donde el color podía
+        /// discrepar, y no alcanzaba: el de clase K necesita metal, no sólo un color.
+        /// </summary>
+        public void SetAgent(AgentType agent, Texture2D label)
         {
             if (spray != null) spray.SetAgent(agent);
-            if (tintBody && bodyRenderer != null) SetColor(bodyRenderer.material, bodyColor);
+            ApplyBodyColor(agent);
             if (labelRenderer != null && label != null) SetTexture(labelRenderer.material, label);
             AgentChanged?.Invoke(agent);
         }
 
-        private static void SetColor(Material m, Color c)
+        /// <summary>Aspecto del cuerpo según el agente, tomado de la tabla común.</summary>
+        public void ApplyBodyColor(AgentType agent)
         {
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-            else m.color = c;
+            if (!tintBody || bodyRenderer == null) return;
+
+            var m = bodyRenderer.material; // instancia: no toca el material compartido
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", AgentColor.Of(agent));
+            else m.color = AgentColor.Of(agent);
+
+            // El de clase K es acero inoxidable, no chapa pintada: sin metallic sale gris mate.
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", AgentColor.MetallicOf(agent));
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", AgentColor.SmoothnessOf(agent));
         }
 
         private static void SetTexture(Material m, Texture t)
