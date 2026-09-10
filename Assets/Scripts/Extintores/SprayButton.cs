@@ -6,9 +6,14 @@ using UnityEngine.Events;
 namespace Extintores
 {
     /// <summary>
-    /// Botón que se acciona <b>apuntándole el chorro del extintor</b>, igual que se apaga un fuego.
-    /// Es la única forma de interacción de la app: no hace falta UGUI, ni TextMeshPro, ni un puntero
-    /// láser, y funciona a distancia — el extintor ya está siempre en la mano del usuario.
+    /// Botón que se acciona <b>apuntándole</b>, a distancia, con lo que el usuario ya tiene en la
+    /// mano. No hace falta UGUI ni TextMeshPro. Dos fuentes lo alimentan, las dos por
+    /// <see cref="Hold"/>:
+    /// <list type="bullet">
+    ///   <item><see cref="LaserPointer"/> — el rayo de la boquilla. Es el camino normal: pega en un
+    ///         solo botón, y su gatillo lo acciona al toque vía <see cref="TryPress"/>.</item>
+    ///   <item>El chorro (<see cref="OnParticleCollision"/>), <b>sólo si no hay ningún láser</b>.</item>
+    /// </list>
     ///
     /// Usa el mismo mecanismo que <see cref="FireSource"/>: el ParticleSystem del chorro tiene
     /// <c>sendCollisionMessages</c>, así que cada partícula que impacta llama a
@@ -16,6 +21,12 @@ namespace Extintores
     /// llena mientras le tirás y se vacía sola si dejás de apuntar. Ese llenado progresivo cumple el
     /// mismo rol que el <c>dwellSeconds</c> de <see cref="ExtinguisherBay"/>: evita que un barrido
     /// accidental del chorro dispare el botón.
+    ///
+    /// ⚠ La carga se mide en <b>segundos de chorro sostenido</b>, no en cantidad de partículas. Con
+    /// el conteo de partículas el ritmo dependía de la distancia al botón (el cono se abre: a 3 m
+    /// llega la cuarta parte que a 1,5 m) y de cuánto se apretaba el grip, así que era imposible de
+    /// calibrar y en el visor se sentía lentísimo. Las partículas ahora sólo dicen <i>si</i> el
+    /// chorro está pegando; el reloj hace el resto.
     ///
     /// Se auto-configura: si no tiene collider le agrega un BoxCollider y se pone en la layer
     /// <see cref="LayerName"/> (contra la que el chorro colisiona siempre).
@@ -36,17 +47,26 @@ namespace Extintores
         [SerializeField] private Vector2 size = new Vector2(0.36f, 0.26f);
 
         [Header("Activación")]
-        [Tooltip("Carga necesaria para accionar. Cada partícula del chorro suma 1.")]
-        [SerializeField] private float chargeNeeded = 45f;
-        [Tooltip("Carga que se pierde por segundo cuando el chorro NO está pegando.")]
-        [SerializeField] private float decayPerSecond = 60f;
+        [Tooltip("Segundos de chorro sostenido para accionar el botón. No depende de la distancia " +
+                 "ni de cuánto aprietes el grip.")]
+        [SerializeField] private float fillSeconds = 0.35f;
+        [Tooltip("Segundos que tarda la barra en vaciarse del todo si dejás de apuntar.")]
+        [SerializeField] private float emptySeconds = 0.30f;
         [Tooltip("Segundos de bloqueo tras accionarse, para no dispararlo dos veces seguidas.")]
-        [SerializeField] private float rearmSeconds = 0.8f;
+        [SerializeField] private float rearmSeconds = 0.6f;
+        [Tooltip("Margen sin impactos que se tolera antes de empezar a vaciar. La colisión de " +
+                 "partículas titila de un frame a otro; sin esto la barra bajaría a los saltos.")]
+        [SerializeField] private float hitGraceSeconds = 0.12f;
 
         [Header("Colores")]
         [SerializeField] private Color idleColor = new Color(0.20f, 0.22f, 0.26f);
+        [Tooltip("Placa cuando el láser lo está apuntando. Además la placa se agranda un poco, así " +
+                 "asoma por detrás y se lee como un borde resaltado.")]
+        [SerializeField] private Color hoverColor = new Color(0.30f, 0.55f, 0.85f);
         [SerializeField] private Color fillColor = new Color(0.20f, 0.80f, 0.35f);
         [SerializeField] private Color disabledColor = new Color(0.32f, 0.32f, 0.32f);
+        [Tooltip("Cuánto se agranda la placa al apuntarlo (1 = nada).")]
+        [SerializeField] private float hoverScale = 1.1f;
 
         [Header("Feedback")]
         [SerializeField] private bool haptics = true;
@@ -61,17 +81,24 @@ namespace Extintores
         public bool Interactable
         {
             get => _interactable;
-            set { _interactable = value; if (!value) _charge = 0f; UpdateVisual(); }
+            set
+            {
+                _interactable = value;
+                if (!value) { _charge = 0f; _lastHitTime = float.NegativeInfinity; }
+                UpdateVisual();
+            }
         }
 
         /// <summary>Progreso de carga 0..1, para que el llenado sea visible.</summary>
-        public float Charge01 => chargeNeeded > 0f ? Mathf.Clamp01(_charge / chargeNeeded) : 0f;
+        public float Charge01 => Mathf.Clamp01(_charge);
 
         private bool _interactable = true;
-        private float _charge;
-        private float _lastHitTime;
+        private bool _hovered;
+        private float _charge;      // 0..1
+        private float _lastHitTime = float.NegativeInfinity;
         private float _lockedUntil;
 
+        private Transform _plate;
         private Transform _fill;
         private Renderer _fillRend;
         private Renderer _plateRend;
@@ -80,6 +107,7 @@ namespace Extintores
         private ExtinguisherHandle _handle;
         private float _drawnCharge = -1f;
         private bool _drawnInteractable;
+        private bool _drawnHovered;
         private MaterialPropertyBlock _mpb;
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -123,7 +151,8 @@ namespace Extintores
         private void BuildVisual()
         {
             // Fondo: sin él, con la carga en cero el botón se vería vacío.
-            _plateRend = CreateQuadChild("Plate", 0f).GetComponent<Renderer>();
+            _plate = CreateQuadChild("Plate", 0f);
+            _plateRend = _plate.GetComponent<Renderer>();
 
             _fill = CreateQuadChild("Fill", -0.004f);
             _fillRend = _fill.GetComponent<Renderer>();
@@ -198,40 +227,85 @@ namespace Extintores
         }
 
         /// <summary>
+        /// Marca que algo está apuntando al botón <b>este frame</b>. Es la única señal que llena la
+        /// barra, y la comparten el chorro y el <see cref="LaserPointer"/>: cuánto carga eso lo
+        /// decide <see cref="Update"/> contra el reloj.
+        /// </summary>
+        public void Hold()
+        {
+            if (!_interactable || Time.time < _lockedUntil) return;
+            _lastHitTime = Time.time;
+        }
+
+        /// <summary>
+        /// Acciona el botón ya, sin esperar el llenado. Lo usa el gatillo del láser.
+        /// Devuelve false si el botón está gris o todavía en el bloqueo del rearme.
+        /// </summary>
+        public bool TryPress()
+        {
+            if (!_interactable || Time.time < _lockedUntil) return false;
+            Press();
+            return true;
+        }
+
+        /// <summary>
+        /// Marca el botón como apuntado por el láser: la placa se agranda y se tiñe, así se ve
+        /// CUÁL está seleccionado antes de disparar. Lo llama <see cref="LaserPointer"/>.
+        /// </summary>
+        public void SetHovered(bool value)
+        {
+            if (_hovered == value) return;
+            _hovered = value;
+            UpdateVisual();
+        }
+
+        /// <summary>
         /// Recibe las partículas del chorro. <paramref name="other"/> es el GameObject del
         /// ParticleSystem que colisionó (la punta de la boquilla).
+        ///
+        /// Con un <see cref="LaserPointer"/> en escena el chorro deja de accionar botones: el cono
+        /// se abre ~14°, así que a la distancia de un menú pega en varios carteles a la vez y no hay
+        /// forma de saber cuál se va a accionar. Si NO hay láser se mantiene el comportamiento
+        /// viejo, para que un error de cableado degrade en vez de dejar la app sin forma de apretar
+        /// nada.
         /// </summary>
         private void OnParticleCollision(GameObject other)
         {
+            if (LaserPointer.ActiveCount > 0) return;
             if (!_interactable || Time.time < _lockedUntil) return;
 
             var spray = other.GetComponent<ExtinguisherSpray>();
             if (spray == null || spray.System == null || !spray.IsSpraying) return;
 
-            int n = spray.System.GetCollisionEvents(gameObject, _events);
-            if (n <= 0) return;
-
-            _charge += n;
-            _lastHitTime = Time.time;
-
-            if (_charge >= chargeNeeded) Press();
+            if (spray.System.GetCollisionEvents(gameObject, _events) > 0) Hold();
         }
 
         private void Update()
         {
-            // Se vacía si el chorro dejó de pegar (unos frames de gracia por si titila la colisión).
-            if (_charge > 0f && Time.time - _lastHitTime > 0.12f)
-                _charge = Mathf.Max(0f, _charge - decayPerSecond * Time.deltaTime);
+            bool locked = Time.time < _lockedUntil;
+            bool hit = _interactable && !locked && Time.time - _lastHitTime <= hitGraceSeconds;
+
+            if (hit)
+            {
+                _charge += fillSeconds > 0f ? Time.deltaTime / fillSeconds : 1f;
+                if (_charge >= 1f) Press();
+            }
+            else if (_charge > 0f)
+            {
+                _charge = Mathf.Max(0f, _charge - (emptySeconds > 0f ? Time.deltaTime / emptySeconds : 1f));
+            }
 
             // Solo se redibuja cuando algo cambió: en el menú hay 8 botones y esto corre en Quest.
             float t = Charge01;
-            if (!Mathf.Approximately(t, _drawnCharge) || _interactable != _drawnInteractable)
+            if (!Mathf.Approximately(t, _drawnCharge) || _interactable != _drawnInteractable
+                || _hovered != _drawnHovered)
                 UpdateVisual();
         }
 
         private void Press()
         {
             _charge = 0f;
+            _lastHitTime = float.NegativeInfinity; // si no, el chorro que sigue pegando recarga solo
             _lockedUntil = Time.time + rearmSeconds;
 
             if (haptics)
@@ -252,8 +326,18 @@ namespace Extintores
             float t = Charge01;
             _drawnCharge = t;
             _drawnInteractable = _interactable;
+            _drawnHovered = _hovered;
 
-            SetColor(_plateRend, _interactable ? idleColor : disabledColor);
+            bool lit = _hovered && _interactable;
+            SetColor(_plateRend, !_interactable ? disabledColor : (lit ? hoverColor : idleColor));
+
+            // La placa está DETRÁS de la barra y del rótulo, así que agrandarla los deja intactos y
+            // asoma alrededor como un borde. Más barato que un quad de contorno por botón.
+            if (_plate != null)
+            {
+                float k = lit ? hoverScale : 1f;
+                _plate.localScale = new Vector3(size.x * k, size.y * k, 1f);
+            }
 
             // La barra crece desde abajo: se escala en Y y se compensa la posición.
             _fill.localScale = new Vector3(size.x, Mathf.Max(0.0001f, size.y * t), 1f);
