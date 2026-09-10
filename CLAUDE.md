@@ -96,6 +96,13 @@ Comportamiento resultante (sin superposiciones):
 
 ## Gotchas / notas aprendidas
 
+- **El tracking origin (`_trackingOriginType`) está en `OVRManager`, NO en `OVRCameraRig`.** Los dos
+  componentes viven en el mismo GameObject del prefab, así que es fácil apuntarle al equivocado —
+  y `SerializedObject.FindProperty` devuelve `null` sin avisar. El default del prefab del SDK es
+  **EyeLevel**, que deja los ojos al ras del piso; el juego lo quiere en **FloorLevel**. Lo corrige
+  `Extintores ▸ Fix Scene Wiring` (helper `Editor/OvrTrackingOrigin.cs`).
+- **No colgar carteles del `CenterEyeAnchor`**: quedan clavados a la cara, giran exacto con la cabeza
+  y no se pueden leer. Usar `BodyLockedPanel` (seguimiento con zona muerta).
 - **`OVRControllerPrefab` trae `m_controller` con un valor viejo inválido** (`33554432`) que no
   corresponde a ningún valor del enum actual (`LTouch=1`, `RTouch=2`). Hay que setear el
   `Controller` explícitamente en cada instancia; si no, el control no se dibuja y no hay error.
