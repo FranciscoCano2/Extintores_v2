@@ -20,7 +20,7 @@ namespace Extintores.EditorTools
         private const string MatFolder = "Assets/Extintores/Warehouse/Materials";
         private const string OutPrefab = "Assets/Prefabs/Warehouse_Blockout.prefab";
 
-        // Medidas del galpón (m). X = ancho, Z = profundidad, Y = altura.
+        // Medidas del galpón (m). X = ancho, Z = profundidad, Y = altura. YardBuilder usa las mismas.
         private const float HalfW = 12f;
         private const float HalfD = 8f;
         private const float WallH = 6f;
@@ -41,6 +41,13 @@ namespace Extintores.EditorTools
 
         /// <summary>Separación lateral del panel respecto del usuario.</summary>
         private const float PanelSide = 0.75f;
+
+        /// <summary>
+        /// Cáscara (piso, paredes, techo, columnas) y estanterías de primitivas. Apagado desde que el
+        /// escenario es el patio del pack (<see cref="YardBuilder"/>): con techo y paredes el patio
+        /// quedaría encerrado. <c>readonly</c> y no <c>const</c> para no generar código inalcanzable.
+        /// </summary>
+        private static readonly bool IncludeBlockoutGeometry = false;
 
         private struct Zone
         {
@@ -86,8 +93,14 @@ namespace Extintores.EditorTools
 
             var root = new GameObject("Warehouse_Blockout");
 
-            BuildShell(root.transform);
-            BuildDressing(root.transform);
+            // La escenografía la pone ahora el patio del pack industrial (YardBuilder). Este prefab
+            // queda sólo con los anchors y los Pad de cada zona. Se deja la opción para volver a ver
+            // el blockout sin el pack.
+            if (IncludeBlockoutGeometry)
+            {
+                BuildShell(root.transform);
+                BuildDressing(root.transform);
+            }
 
             foreach (var z in Zones) BuildZone(root.transform, z);
             BuildLobby(root.transform);

@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using AmbientMode = UnityEngine.Rendering.AmbientMode;
 
 namespace Extintores.EditorTools
 {
@@ -85,6 +86,7 @@ namespace Extintores.EditorTools
             FixStationPrefab(apply, station);
             FixBayLabels(apply);
             FixPanelAnchors(apply);
+            FixYard(apply);
             FixHud(apply, training);
             CheckFires(spray);
             CheckTrainingSetup();
@@ -752,6 +754,204 @@ namespace Extintores.EditorTools
             var quad = bay.transform.Find("Label");
             var mat = quad != null && quad.TryGetComponent<MeshRenderer>(out var r) ? r.sharedMaterial : null;
             return mat == null || !mat.HasProperty("_BaseMap") || mat.GetTexture("_BaseMap") != tex;
+        }
+
+        // ------------------------------------------------------------------ patio
+        private const string SkyboxPath =
+            "Assets/RPG_FPS_game_assets_industrial/Textures/Skyboxes/Skybox_v9.mat";
+
+        /// <summary>Lo que el blockout ya no debe mostrar: con techo y paredes el patio queda encerrado.</summary>
+        private static readonly string[] BlockoutGeometry = { "Shell", "Dressing" };
+
+        // Despejes que ningún prop del patio puede invadir (ver CheckYardClearance).
+        private const float FireClearance = 1.8f;
+        private const float CorridorRadius = 0.6f;
+        private static readonly Vector3 PanelClearance = new Vector3(1.4f, 1.0f, 1.4f);
+
+        /// <summary>
+        /// Pasa la escena del blockout al patio industrial (<see cref="YardBuilder"/>): apaga la
+        /// cáscara del blockout, instancia el patio y pone el cielo del pack.
+        ///
+        /// La cáscara se APAGA en el asset y no se borra ni se rehace el prefab: los FireStation de la
+        /// escena apuntan a sus anchors por fileID, y rehacerlo los dejaría apuntando a la nada.
+        /// </summary>
+        private static void FixYard(bool apply)
+        {
+            var yardAsset = AssetDatabase.LoadAssetAtPath<GameObject>(YardBuilder.OutPrefab);
+            if (yardAsset == null)
+            {
+                Ok("(aviso) Todavía no hay patio industrial: la escena sigue con el blockout. " +
+                   "Corré 'Extintores ▸ Build Industrial Yard'.");
+                return;
+            }
+
+            HideBlockoutGeometry(apply);
+            var yard = EnsureYardInstance(apply, yardAsset);
+            FixSkybox(apply);
+            if (yard != null) CheckYardClearance(yard);
+        }
+
+        private static void HideBlockoutGeometry(bool apply)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(WarehousePrefabPath);
+            if (asset == null) return; // FixPanelAnchors ya lo avisa
+
+            var visible = new List<string>();
+            foreach (var n in BlockoutGeometry)
+            {
+                var t = asset.transform.Find(n);
+                if (t != null && t.gameObject.activeSelf) visible.Add(n);
+            }
+
+            if (visible.Count == 0) { Ok("El blockout ya no muestra cáscara: el escenario es el patio."); return; }
+
+            if (!apply)
+            {
+                Problem($"El blockout todavía muestra {string.Join(" y ", visible)}: techo y paredes " +
+                        "encierran el patio industrial.");
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(WarehousePrefabPath);
+            try
+            {
+                foreach (var n in visible) contents.transform.Find(n).gameObject.SetActive(false);
+                PrefabUtility.SaveAsPrefabAsset(contents, WarehousePrefabPath);
+                Fixed($"{string.Join(" y ", visible)} apagados en '{WarehousePrefabPath}' (anchors intactos).");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        private static GameObject EnsureYardInstance(bool apply, GameObject yardAsset)
+        {
+            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
+                foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                    if (PrefabUtility.IsOutermostPrefabInstanceRoot(t.gameObject) &&
+                        PrefabUtility.GetCorrespondingObjectFromSource(t.gameObject) == yardAsset)
+                    {
+                        Ok($"Patio industrial en escena: '{Path(t)}'.");
+                        return t.gameObject;
+                    }
+
+            if (!apply) { Problem("El patio industrial no está en la escena."); return null; }
+
+            // Hermano del galpón y con su misma pose: el patio está medido en el espacio del blockout.
+            var station = Object.FindFirstObjectByType<FireStation>(FindObjectsInactive.Include);
+            var warehouse = station != null && station.PanelAnchor != null
+                ? PrefabUtility.GetOutermostPrefabInstanceRoot(station.PanelAnchor)
+                : null;
+
+            var yard = (GameObject)PrefabUtility.InstantiatePrefab(yardAsset, SceneManager.GetActiveScene());
+            Undo.RegisterCreatedObjectUndo(yard, "Instanciar patio industrial");
+            if (warehouse != null)
+            {
+                yard.transform.SetParent(warehouse.transform.parent, false);
+                yard.transform.SetPositionAndRotation(warehouse.transform.position, warehouse.transform.rotation);
+            }
+            Fixed($"Patio industrial instanciado{(warehouse != null ? $" junto a '{warehouse.name}'" : "")}.");
+            return yard;
+        }
+
+        private static void FixSkybox(bool apply)
+        {
+            var sky = AssetDatabase.LoadAssetAtPath<Material>(SkyboxPath);
+            if (sky == null) { Problem($"No se encontró el cielo del pack '{SkyboxPath}'."); return; }
+
+            bool ok = RenderSettings.skybox == sky && RenderSettings.ambientMode == AmbientMode.Skybox;
+            if (ok) { Ok("Cielo del pack y luz ambiente desde el skybox."); return; }
+
+            if (!apply) { Problem("El patio está a cielo abierto pero la escena usa el skybox por defecto."); return; }
+
+            RenderSettings.skybox = sky;
+            RenderSettings.ambientMode = AmbientMode.Skybox;
+            if (RenderSettings.sun == null)
+            {
+                foreach (var l in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+                    if (l.type == LightType.Directional) { RenderSettings.sun = l; break; }
+            }
+            DynamicGI.UpdateEnvironment();
+            Fixed("Skybox_v9 puesto como cielo, con la luz ambiente tomada de él.");
+        }
+
+        /// <summary>
+        /// Ningún prop del patio puede tapar un puesto. Reporta, no repara: la corrección es mover el
+        /// prop en la tabla de <see cref="YardBuilder"/> y regenerar.
+        ///
+        /// Existe porque "no veo el fuego" o "no encuentro el panel" ya costaron rondas enteras de
+        /// visor, y siempre era algo fuera de lugar que ningún error delataba.
+        /// </summary>
+        private static void CheckYardClearance(GameObject yard)
+        {
+            var station = Object.FindFirstObjectByType<FireStation>(FindObjectsInactive.Include);
+            var warehouse = station != null && station.PanelAnchor != null
+                ? PrefabUtility.GetOutermostPrefabInstanceRoot(station.PanelAnchor)
+                : null;
+            if (warehouse == null) { Ok("(aviso) Sin puestos en escena: no hay despejes que revisar."); return; }
+
+            var props = new List<Renderer>();
+            foreach (var r in yard.GetComponentsInChildren<Renderer>(true))
+                if (r.gameObject.name != YardBuilder.GroundName && !(r is ParticleSystemRenderer)) props.Add(r);
+
+            int before = _problems;
+            foreach (var z in Zones(warehouse.transform))
+            {
+                foreach (var r in props)
+                {
+                    var b = r.bounds;
+                    string who = PropName(r, yard);
+
+                    if (z.Fire != null && DistanceXZ(b, z.Fire.position) < FireClearance)
+                        Problem($"'{who}' está a menos de {FireClearance} m del fuego de {z.Name}.");
+                    else if (z.Fire != null && b.min.y < 2f && SegmentHits(b, z.Spawn.position, z.Fire.position, CorridorRadius))
+                        Problem($"'{who}' se cruza entre el usuario y el fuego de {z.Name}.");
+
+                    if (b.Intersects(new Bounds(z.Panel.position, PanelClearance)))
+                        Problem($"'{who}' tapa el panel de extintores de {z.Name}.");
+                }
+
+                // Lobby: la línea de la mirada al menú.
+                var menu = z.Spawn.parent.Find("MenuAnchor");
+                if (menu == null) continue;
+                var eye = z.Spawn.position + Vector3.up * 1.5f;
+                foreach (var r in props)
+                    if (SegmentHits(r.bounds, eye, menu.position, 0.2f, flat: false))
+                        Problem($"'{PropName(r, yard)}' tapa el menú del {z.Name}.");
+            }
+
+            if (_problems == before)
+                Ok($"Ningún prop del patio ({props.Count} renderers) tapa fuegos, corredores, paneles ni el menú.");
+        }
+
+        private static string PropName(Renderer r, GameObject yard)
+        {
+            var root = PrefabUtility.GetNearestPrefabInstanceRoot(r.gameObject);
+            return root != null && root != yard ? root.name : r.name;
+        }
+
+        private static float DistanceXZ(Bounds b, Vector3 p)
+        {
+            var q = b.ClosestPoint(new Vector3(p.x, b.center.y, p.z));
+            return new Vector2(q.x - p.x, q.z - p.z).magnitude;
+        }
+
+        /// <summary>
+        /// ¿El segmento pasa a menos de <paramref name="radius"/> del bounds? Muestreado cada 10 cm, que
+        /// sobra para props de medio metro para arriba. <paramref name="flat"/> ignora la altura (corredor
+        /// a nivel del piso); sin él se mide en 3D (la línea de la mirada).
+        /// </summary>
+        private static bool SegmentHits(Bounds b, Vector3 from, Vector3 to, float radius, bool flat = true)
+        {
+            int steps = Mathf.Max(2, Mathf.CeilToInt(Vector3.Distance(from, to) / 0.1f));
+            for (int i = 0; i <= steps; i++)
+            {
+                var p = Vector3.Lerp(from, to, i / (float)steps);
+                float d = flat ? DistanceXZ(b, p) : Vector3.Distance(b.ClosestPoint(p), p);
+                if (d < radius) return true;
+            }
+            return false;
         }
 
         // ------------------------------------------------------------------ HUD
