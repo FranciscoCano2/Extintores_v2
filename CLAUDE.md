@@ -11,7 +11,7 @@ Este archivo cubre el **entorno y el rig XR**. El diseño y el estado del juego 
 
 | Documento | Qué contiene |
 |---|---|
-| [`docs/PLAN-ejercicio-entrenamiento.md`](docs/PLAN-ejercicio-entrenamiento.md) | **Estado actual.** Menú de modos, puestos, galpón, botones por chorro. Arquitectura, qué está hecho y qué falta. |
+| [`docs/PLAN-ejercicio-entrenamiento.md`](docs/PLAN-ejercicio-entrenamiento.md) | **Estado actual.** Menú de modos, puestos, patio industrial (antes galpón), botones por chorro. Arquitectura, qué está hecho y qué falta. |
 | [`docs/PLAN-fuegos-y-extintores.md`](docs/PLAN-fuegos-y-extintores.md) | Diseño de fondo: clases de fuego A/B/C/K, agentes, matriz de efectividad, pared de recarga. |
 | [`docs/CREDITS.md`](docs/CREDITS.md) | Licencias de los assets de terceros (varios CC-BY: hay que acreditar). |
 

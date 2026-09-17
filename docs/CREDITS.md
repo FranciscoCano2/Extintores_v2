@@ -42,6 +42,9 @@ Estas son las que instancia `FirePrefabBuilder` en `Fire_A/B/C/K`:
 
 ## VFX y base
 - **Free Fire VFX – URP** — Vefects — Unity Asset Store (productId 266226) — Asset Store EULA.
+- **RPG/FPS Game Assets for PC/Mobile (Industrial Set v2.0)** — Unity Asset Store (productId 86679)
+  — Asset Store EULA (gratis). Escenario del patio: muros, containers, hangares, tanques, props y
+  skybox. Está en `Assets/RPG_FPS_game_assets_industrial/`; lo arma `Extintores ▸ Build Industrial Yard`.
 - Extintor: FBX de pack "Police" (ver `CLAUDE.md`) — revisar/registrar licencia de origen.
 
 ## Alternativas descargadas (no usadas por los prefabs)

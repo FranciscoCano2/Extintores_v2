@@ -94,11 +94,15 @@ La **quinta** ronda:
   código, y evita que se aleje y rompa el ejercicio.
 - **El tutorial habilita TODOS los agentes efectivos** (efectividad ≥ 0.9), no uno solo: para clase
   A sirven Agua, Espuma y ABC, y mostrar una única opción enseñaría algo falso.
-- **Una sola escena.** Menú, galpón y los 4 puestos conviven; no hay carga de escenas. El lobby es
-  un punto más del galpón al que se vuelve al terminar.
-- **Blockout por código primero, assets después.** No hay un solo asset de arquitectura en el
-  proyecto. El blockout fija medidas y flujo sin gastar ni sumar MB; como los puestos son
-  Transforms, la geometría se reemplaza sin tocar lógica.
+- **Una sola escena.** Menú, patio y los 4 puestos conviven; no hay carga de escenas. El lobby es
+  un punto más del patio al que se vuelve al terminar.
+- **Blockout por código primero, assets después.** El blockout fijó medidas y flujo sin sumar MB.
+  Como los puestos son Transforms, la geometría se reemplazó sin tocar lógica: los anchors siguen
+  en `Warehouse_Blockout` y el escenario lo pone `Yard_Industrial`.
+- **Patio a cielo abierto, no galpón cerrado.** El pack industrial es de exterior y muy low-poly:
+  sus hangares son cáscaras de 74 a 1.500 triángulos, sin interior, así que parado adentro no se
+  ve nada. Los puestos pasan a un patio de 24 × 16 m con muro de hormigón y portón, y los hangares
+  y tanques quedan afuera del muro, como horizonte. Mismas medidas y mismos anchors que antes.
 
 ## 3. Convención de orientación ⚠️
 
@@ -130,7 +134,8 @@ TrainingSession            ← orquesta: modo, cola de puestos, reposicionamient
 MainMenu                   ← 3 modos + submenú de 4 clases
 LaserPointer               ← en el NozzleTip: apunta y acciona TODOS los SprayButton
 TrainingHud + BodyLockedPanel ← cartel que te sigue con zona muerta (NO cuelga del ojo)
-Warehouse_Blockout         ← geometría + anchors (Zone_A..K, Lobby)
+Warehouse_Blockout         ← SÓLO anchors (Zone_A..K, Lobby) + Pad de color; Shell/Dressing apagados
+Yard_Industrial            ← escenografía del pack: piso, muro, props por zona, horizonte
 ```
 
 **Piezas clave y por qué son así:**
@@ -234,7 +239,9 @@ Warehouse_Blockout         ← geometría + anchors (Zone_A..K, Lobby)
 - [ ] El panel queda a 0,75 m del costado (`WarehouseBuilder.PanelSide`), medida pensada para
       alcanzarlo con el brazo. Con el láser ya no hace falta que esté al alcance: se podría alejar
       y agrandar. Decidirlo con el visor puesto.
-- [ ] **Reemplazar el blockout del galpón con el pack**, zona por zona.
+- [ ] **Patio industrial aplicado en la escena** (54 renderers, 5.880 triángulos; anchors del
+      blockout con los mismos fileID). Falta confirmar que `Validate Setup` no marca despejes y
+      ajustar las posiciones con el visor puesto, en la tabla `Props` de `YardBuilder.cs`.
 - [ ] Opcional: 3 materiales del pack siguen en shaders Built-in porque el Material Upgrade no
       convierte partículas ni skybox: `Particles/Dust/Dust_v1`, `Particles/Smoke/.../New Material`
       y `Textures/Skyboxes/Skybox_v9`. El skybox anda en URP; las partículas salen magenta si se usan.
@@ -290,7 +297,11 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
 - [ ] Al apagar un fuego **no** te teletransporta: aparece "Continuar".
 - [ ] El panel se alcanza con el brazo sin caminar.
 - [ ] Con el agente equivocado el fuego se aviva y suena el aviso.
-- [ ] Framerate estable con el galpón + VFX.
+- [ ] Framerate estable con el patio + VFX.
+- [ ] El menú, el HUD y los rótulos de los botones **se leen contra el cielo** (el blockout tenía
+      paredes grises atrás; ahora puede haber cielo brillante).
+- [ ] Ningún prop del patio tapa un fuego, el panel o el menú, y no se ven bordes del piso ni
+      hangares "huecos" desde ningún puesto.
 
 ## 7. Gotchas de esta fase
 
@@ -344,7 +355,8 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
 |---|---|
 | `Extintores ▸ Validate Setup` | Diagnostica la escena. No modifica nada. **Empezá por acá.** |
 | `Extintores ▸ Fix Scene Wiring` | Repara el cableado (managers, sensor, HUD, FloorLevel, prefab de la pared). |
-| `Extintores ▸ Build Warehouse Blockout` | Genera `Prefabs/Warehouse_Blockout.prefab`. |
+| `Extintores ▸ Build Warehouse Blockout` | Genera `Prefabs/Warehouse_Blockout.prefab` (sólo anchors y pads). **Les cambia los fileID a los anchors**: rompe los `FireStation` de la escena. |
+| `Extintores ▸ Build Industrial Yard` | Genera `Prefabs/Yard_Industrial.prefab` con el pack. Seguro de re-correr. Después, `Fix Scene Wiring`. |
 | `Extintores ▸ Build Training Scene` | Arma el ejercicio sobre la escena abierta. |
 | `Extintores ▸ Build Fire Prefabs (A B C K)` | Regenera `Prefabs/Fires/Fire_X.prefab`. **Les cambia los fileID**: rompe las referencias de la escena. |
 | `Extintores ▸ Fix Fire Prefabs` | Repara los prefabs de fuego en el asset (llama a la raíz + crepitar) **sin** romper la escena. |
