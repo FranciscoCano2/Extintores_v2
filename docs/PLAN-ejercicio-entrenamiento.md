@@ -214,10 +214,18 @@ Warehouse_Blockout         ← geometría + anchors (Zone_A..K, Lobby)
 - [x] **La convención −Z de §3 quedó confirmada en el visor**: el texto de los botones se lee bien,
       no espejado. No hay que dar vuelta ningún eje.
 
+- [x] **Correcciones aplicadas en la escena** (`4574f9ad`, incluye `Training.unity`).
+- [x] **Pack industrial importado y commiteado** (`6cb6ec59`, 278 MB): los 36 materiales de modelos
+      ya pasaron por el Render Pipeline Converter (URP/Lit). Los `.fbx` van por LFS; el resto no,
+      porque ya hay `.tga` commiteados sin LFS (ver `.gitattributes`).
+- [x] Texturas de `Assets/ThirdParty/FireCauses` y del pack industrial topeadas a 1024 px.
+      ⚠️ `Fix Sketchfab Textures` sin carpeta seleccionada cae a `FireCauses`: para otro pack,
+      seleccionarlo primero en el Project.
+- [x] **Etiqueta de la bahía BC** (`Label_BC.png`: letras "BC" y sólo los chips B y C). La asigna
+      `Fix Scene Wiring` (`FixBayLabels`) editando el asset, sin rehacer la pared.
+
 ### Pendiente ⬜
 
-- [ ] **Aplicar las correcciones en la escena** — el código está, la escena guardada no.
-      `Extintores ▸ Fix Scene Wiring` → **Ctrl+S** → `Validate Setup`. Ver §6.
 - [ ] **Build & Run en el Quest** — imprescindible: por Link no llegan ni la colisión de partículas
       ni la pose de los mandos. Checklist en §6.
 - [ ] Ajustar en el visor: comodidad del HUD (`BodyLockedPanel`: `distance` 1,5 m, `heightOffset`
@@ -226,16 +234,13 @@ Warehouse_Blockout         ← geometría + anchors (Zone_A..K, Lobby)
 - [ ] El panel queda a 0,75 m del costado (`WarehouseBuilder.PanelSide`), medida pensada para
       alcanzarlo con el brazo. Con el láser ya no hace falta que esté al alcance: se podría alejar
       y agrandar. Decidirlo con el visor puesto.
-- [ ] **Pack industrial: importado (278 MB en `Assets/RPG_FPS_game_assets_industrial`), sin
-      preparar.** Verificado en los `.mat`: **los 36 materiales usan shaders Built-in**
-      (`guid 0000…f000…`), así que todo el pack sale MAGENTA en URP. Antes de tocar el blockout:
-  1. `Window ▸ Rendering ▸ Render Pipeline Converter` → *Built-in to URP* → **Material Upgrade**.
-     Es mejor que cualquier conversor propio: mapea metallic/smoothness/normales bien.
-  2. Seleccionar la carpeta del pack en el Project y correr `Extintores ▸ Fix Sketchfab Textures`
-     — ahora también baja el tope de resolución de 2048 a **1024** (sólo toca el importador).
-  3. Recién ahí, reemplazar el blockout zona por zona.
-- [ ] Falta `Assets/Extintores/Labels/Label_BC.png` para la bahía nueva. El builder tolera la
-      etiqueta faltante (el botón dice "BC"), pero el quad del rótulo queda liso.
+- [ ] **Reemplazar el blockout del galpón con el pack**, zona por zona.
+- [ ] Opcional: 3 materiales del pack siguen en shaders Built-in porque el Material Upgrade no
+      convierte partículas ni skybox: `Particles/Dust/Dust_v1`, `Particles/Smoke/.../New Material`
+      y `Textures/Skyboxes/Skybox_v9`. El skybox anda en URP; las partículas salen magenta si se usan.
+- [ ] Opcional: ~250 de los 278 MB del pack son arte fuente que el juego no usa (carpetas
+      `Source/`, `.psd` de 58 MB, lightmaps `.exr` de la escena demo `Map_v1`). Ya está pusheado:
+      borrarlo no achica el `.git` sin reescribir historia.
 
 ## 6. Cómo correrlo
 
