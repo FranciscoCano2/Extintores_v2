@@ -47,8 +47,8 @@ namespace Extintores.EditorTools
 
         // Los 6 agentes de AgentType, sin excepciones: un agente que existe en la matriz de
         // efectividad pero no tiene bahía es inalcanzable en juego, y BC enseña algo que ABC no
-        // (el polvo BC NO sirve para clase A). No hay Label_BC.png y no hace falta: el builder
-        // tolera la etiqueta faltante y el botón ya dice "BC".
+        // (el polvo BC NO sirve para clase A). El builder tolera una etiqueta faltante (el botón ya
+        // lleva el nombre), pero el quad queda liso: SceneWiringFixer la asigna si aparece después.
         private static readonly BayDef[] Bays =
         {
             new BayDef { Agent = AgentType.Water,       Label = "Label_Water",       Caption = "AGUA" },
@@ -58,6 +58,16 @@ namespace Extintores.EditorTools
             new BayDef { Agent = AgentType.DryChemBC,   Label = "Label_BC",          Caption = "BC" },
             new BayDef { Agent = AgentType.WetChemical, Label = "Label_WetChemical", Caption = "K" },
         };
+
+        /// <summary>Id de la etiqueta de un agente (<c>Label_BC</c>), o null si no tiene bahía.</summary>
+        internal static string LabelIdOf(AgentType agent)
+        {
+            foreach (var b in Bays)
+                if (b.Agent == agent) return b.Label;
+            return null;
+        }
+
+        internal static string LabelTexturePath(string labelId) => $"{LabelsFolder}/{labelId}.png";
 
         [MenuItem("Extintores/Build Extinguisher Wall")]
         public static void Build()
@@ -110,7 +120,7 @@ namespace Extintores.EditorTools
                 box.center = new Vector3(0f, 0f, -0.10f);
 
                 var comp = bay.AddComponent<ExtinguisherBay>();
-                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{LabelsFolder}/{b.Label}.png");
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(LabelTexturePath(b.Label));
 
                 // Botón del chorro: es la forma normal de elegir el extintor. Cuelga de la bahía
                 // (ExtinguisherBay lo engancha solo en Awake) pero queda por DEBAJO de la etiqueta y
@@ -229,7 +239,7 @@ namespace Extintores.EditorTools
             return mat;
         }
 
-        private static Material GetLabelMat(string id, Texture2D tex)
+        internal static Material GetLabelMat(string id, Texture2D tex)
         {
             string path = $"{MatFolder}/M_{id}.mat";
             var existing = AssetDatabase.LoadAssetAtPath<Material>(path);

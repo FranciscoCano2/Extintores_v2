@@ -83,6 +83,7 @@ namespace Extintores.EditorTools
             FixSwappableWiring(apply, swappable, spray);
             FixLaser(apply, spray);
             FixStationPrefab(apply, station);
+            FixBayLabels(apply);
             FixPanelAnchors(apply);
             FixHud(apply, training);
             CheckFires(spray);
@@ -687,6 +688,70 @@ namespace Extintores.EditorTools
             {
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+        }
+
+        /// <summary>
+        /// Asigna las etiquetas que aparecieron DESPUÉS de generar la pared (así llegó
+        /// <c>Label_BC.png</c>). Sin esto la bahía queda con el quad liso y el tanque sin etiqueta al
+        /// elegirla, y la única salida era rehacer el panel con WallBuilder. Edita el asset como
+        /// <see cref="FixStationPrefab"/>, para no cambiarle los fileID a la instancia de la escena.
+        /// </summary>
+        private static void FixBayLabels(bool apply)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(StationPrefabPath);
+            if (asset == null) return; // FixStationPrefab ya lo reporta
+
+            var missing = new List<string>();
+            foreach (var bay in asset.GetComponentsInChildren<ExtinguisherBay>(true))
+                if (LabelNeedsWiring(bay, out _, out _)) missing.Add(bay.Agent.ToString());
+
+            if (missing.Count == 0) { Ok("Las bahías tienen su etiqueta (las que tienen textura)."); return; }
+
+            if (!apply)
+            {
+                Problem($"Bahías sin etiqueta aunque la textura existe: {string.Join(", ", missing)}. " +
+                        "El rótulo queda liso y el tanque no la recibe al elegirla.");
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(StationPrefabPath);
+            try
+            {
+                foreach (var bay in contents.GetComponentsInChildren<ExtinguisherBay>(true))
+                {
+                    if (!LabelNeedsWiring(bay, out var id, out var tex)) continue;
+
+                    var so = new SerializedObject(bay);
+                    SetRef(so, "label", tex);
+                    so.ApplyModifiedPropertiesWithoutUndo();
+
+                    var quad = bay.transform.Find("Label");
+                    var r = quad != null ? quad.GetComponent<MeshRenderer>() : null;
+                    if (r != null) r.sharedMaterial = WallBuilder.GetLabelMat(id, tex);
+                }
+                PrefabUtility.SaveAsPrefabAsset(contents, StationPrefabPath);
+                Fixed($"Etiqueta asignada en 'ExtinguisherStation.prefab': {string.Join(", ", missing)}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        private static bool LabelNeedsWiring(ExtinguisherBay bay, out string id, out Texture2D tex)
+        {
+            tex = null;
+            id = WallBuilder.LabelIdOf(bay.Agent);
+            if (id == null) return false;
+
+            tex = AssetDatabase.LoadAssetAtPath<Texture2D>(WallBuilder.LabelTexturePath(id));
+            if (tex == null) return false; // sin textura no hay nada que asignar: el botón ya lleva el nombre
+
+            if (bay.Label != tex) return true;
+
+            var quad = bay.transform.Find("Label");
+            var mat = quad != null && quad.TryGetComponent<MeshRenderer>(out var r) ? r.sharedMaterial : null;
+            return mat == null || !mat.HasProperty("_BaseMap") || mat.GetTexture("_BaseMap") != tex;
         }
 
         // ------------------------------------------------------------------ HUD
