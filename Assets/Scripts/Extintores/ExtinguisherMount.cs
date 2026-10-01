@@ -25,6 +25,17 @@ namespace Extintores
         [Tooltip("Mano que sostiene el extintor. Determina el mando leído para trigger/háptica.")]
         [SerializeField] private MountHand hand = MountHand.Right;
 
+        [Tooltip("Si está activo, el extintor sigue la pose del MANDO FÍSICO (RTouch/LTouch) " +
+                 "en vez de la del anchor. Imprescindible en multimodal: RightHandAnchor sigue " +
+                 "el input 'activo' dando prioridad a la mano rastreada, no al mando. Como el " +
+                 "prop real lleva el mando atado, hay que seguir el mando siempre.")]
+        [SerializeField] private bool followController = true;
+
+        [Tooltip("Espacio de tracking del OVRCameraRig (nodo 'TrackingSpace'), en el que están " +
+                 "definidas las poses de OVRInput. Si queda vacío se usa el padre del anchor " +
+                 "(RightHandAnchor cuelga de TrackingSpace), que es lo correcto para este rig.")]
+        [SerializeField] private Transform trackingSpace;
+
         [Header("Offset de calibración (mando ↔ extintor real)")]
         [Tooltip("Posición del extintor relativa al anchor, en espacio local del anchor (metros). " +
                  "Se calibrará más adelante para casar con el prop físico.")]
@@ -32,6 +43,25 @@ namespace Extintores
 
         [Tooltip("Rotación del extintor relativa al anchor (euler, grados).")]
         [SerializeField] private Vector3 rotationOffset = Vector3.zero;
+
+        [Header("Ajuste del usuario (menú Configuración)")]
+        [Tooltip("Qué ajuste de GameSettings aplica a este objeto. Tanque: altura de la abrazadera " +
+                 "sobre su eje + rotación en los 3 ejes alrededor de la abrazadera. Boquilla: " +
+                 "deslizamiento sobre su eje.")]
+        [SerializeField] private UserSlide userSlide = UserSlide.ByHand;
+
+        [Tooltip("Eje sobre el que se desliza, en el espacio del punto de agarre (o de la raíz si no " +
+                 "hay). Tanque: +Y, su eje largo. Boquilla: +Z, hacia donde sale el chorro.")]
+        [SerializeField] private Vector3 slideAxis = Vector3.zero;
+
+        public enum UserSlide
+        {
+            /// <summary>Mano derecha = tanque, izquierda = boquilla (el esquema a dos manos).</summary>
+            ByHand,
+            None,
+            TankHeight,
+            NozzleOffset,
+        }
 
         [Header("Referencias")]
         [Tooltip("Punto de agarre: dónde queda atado el mando sobre el extintor real. " +
@@ -66,11 +96,19 @@ namespace Extintores
 
         private void LateUpdate()
         {
-            if (anchor == null) return;
+            // Pose base del "anclaje": o la del mando físico (multimodal) o la del anchor.
+            if (!TryGetAnchorPose(out Vector3 anchorPos, out Quaternion anchorRot)) return;
 
             // Pose objetivo: dónde debe quedar el punto de agarre del extintor.
-            Vector3 targetPos = anchor.TransformPoint(positionOffset);
-            Quaternion targetRot = anchor.rotation * Quaternion.Euler(rotationOffset);
+            Vector3 targetPos = anchorPos + anchorRot * positionOffset;
+            Quaternion targetRot = anchorRot * Quaternion.Euler(rotationOffset);
+
+            // Ajuste del usuario, encima de la calibración de fábrica. Primero la rotación: como
+            // targetRot/targetPos son la pose del AGARRE, girar acá hace pivotar el tanque alrededor
+            // de la abrazadera, que es por donde está unido al mando. Después el deslizamiento, en el
+            // espacio ya girado, así sigue siendo "a lo largo del tanque".
+            targetRot *= UserRotation();
+            targetPos += targetRot * (SlideAxis() * SlideDistance() + UserShift());
 
             if (gripPoint == null)
             {
@@ -88,6 +126,87 @@ namespace Extintores
             Vector3 rootPos = targetPos - rootRot * gripLocalPos;
 
             transform.SetPositionAndRotation(rootPos, rootRot);
+        }
+
+        private UserSlide ResolvedSlide() =>
+            userSlide != UserSlide.ByHand ? userSlide
+            : hand == MountHand.Right ? UserSlide.TankHeight : UserSlide.NozzleOffset;
+
+        /// <summary>Rotación elegida en Configuración. Sólo el tanque: la boquilla se desliza nada más.</summary>
+        private Quaternion UserRotation() =>
+            ResolvedSlide() == UserSlide.TankHeight ? Quaternion.Euler(GameSettings.TankRotation)
+                                                    : Quaternion.identity;
+
+        /// <summary>Desplazamiento transversal (X/Z del tanque) elegido en Configuración. Sólo el tanque.</summary>
+        private Vector3 UserShift() =>
+            ResolvedSlide() == UserSlide.TankHeight ? GameSettings.TankShift : Vector3.zero;
+
+        private Vector3 SlideAxis()
+        {
+            if (slideAxis.sqrMagnitude > 1e-6f) return slideAxis.normalized;
+            return ResolvedSlide() == UserSlide.NozzleOffset ? Vector3.forward : Vector3.up;
+        }
+
+        /// <summary>
+        /// Cuánto se corre el prop sobre <see cref="SlideAxis"/>. Para el tanque el valor del menú es
+        /// la altura del MANDO: si la abrazadera sube, el tanque queda más abajo respecto del mando,
+        /// de ahí el signo.
+        /// </summary>
+        private float SlideDistance()
+        {
+            switch (ResolvedSlide())
+            {
+                case UserSlide.TankHeight: return -GameSettings.TankControllerHeight;
+                case UserSlide.NozzleOffset: return GameSettings.NozzleOffset;
+                default: return 0f;
+            }
+        }
+
+        /// <summary>
+        /// Pose base a la que se acopla el extintor. En modo <see cref="followController"/> es la
+        /// pose del mando físico (RTouch/LTouch) expresada en mundo; si no, la del anchor.
+        /// </summary>
+        private bool TryGetAnchorPose(out Vector3 pos, out Quaternion rot)
+        {
+            if (followController)
+            {
+                // Espacio en el que OVRInput reporta las poses (TrackingSpace del rig).
+                Transform space = trackingSpace != null ? trackingSpace
+                                : anchor != null ? anchor.parent
+                                : ResolveTrackingSpace();
+                if (space != null)
+                {
+                    var mask = hand == MountHand.Right ? OVRInput.Controller.RTouch
+                                                       : OVRInput.Controller.LTouch;
+                    pos = space.TransformPoint(OVRInput.GetLocalControllerPosition(mask));
+                    rot = space.rotation * OVRInput.GetLocalControllerRotation(mask);
+                    return true;
+                }
+                // Sin espacio de tracking válido: caemos al anchor como respaldo.
+            }
+
+            if (anchor == null)
+            {
+                pos = default;
+                rot = default;
+                return false;
+            }
+
+            pos = anchor.position;
+            rot = anchor.rotation;
+            return true;
+        }
+
+        private Transform _autoSpace;
+
+        /// <summary>Busca el TrackingSpace del OVRCameraRig si no se asignó anchor/trackingSpace.
+        /// Permite montar un objeto (p. ej. la boquilla en la izquierda) sin cablear el anchor.</summary>
+        private Transform ResolveTrackingSpace()
+        {
+            if (_autoSpace != null) return _autoSpace;
+            var rig = FindFirstObjectByType<OVRCameraRig>();
+            if (rig != null) _autoSpace = rig.trackingSpace;
+            return _autoSpace;
         }
 
         private void OnDrawGizmosSelected()

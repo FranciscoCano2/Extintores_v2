@@ -85,3 +85,19 @@ crashlytics-build.properties
 # ---------------------------------------------------------------
 sysinfo.txt
 *.stackdump
+
+# ---------------------------------------------------------------
+# Packs importados por error / sin usar
+# Warehouse_Pack_HD: 105 MB de assets HDRP + Built-in (este proyecto es URP)
+# y sin una sola referencia desde escenas o prefabs. Se deja en disco por si
+# se quiere usar como escenario, pero fuera del repo.
+# ---------------------------------------------------------------
+/[Aa]ssets/NAACo/
+/[Aa]ssets/NAACo.meta
+
+# Escenas de recuperación que genera Unity tras un crash
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
+
+# Temporales de build de Unity/Android (Gradle, IL2CPP)
+/.utmp/

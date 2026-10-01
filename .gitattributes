@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# ---------------------------------------------------------------
+# Git LFS — mallas 3D
+# Los FBX de las causas de fuego suman ~100 MB (el cartón de clase A es un
+# escaneo de Tripo de 64 MB). Sin LFS engordan el .git para siempre.
+# Solo *.fbx: meter *.png acá dejaría una historia inconsistente con las
+# texturas ya commiteadas sin LFS, a cambio de poco.
+# ---------------------------------------------------------------
+*.fbx filter=lfs diff=lfs merge=lfs -text

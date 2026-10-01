@@ -5,6 +5,25 @@ Usa el modo **Multimodal (Simultaneous Hands and Controllers)** del Meta XR SDK:
 controles rastreados a la vez, con transición automática según el control esté en la mano
 o soltado.
 
+## Documentación (leer ANTES de tocar nada)
+
+Este archivo cubre el **entorno y el rig XR**. El diseño y el estado del juego están en `docs/`:
+
+| Documento | Qué contiene |
+|---|---|
+| [`docs/PLAN-ejercicio-entrenamiento.md`](docs/PLAN-ejercicio-entrenamiento.md) | **Estado actual.** Menú de modos, puestos, patio industrial (antes galpón), botones por chorro. Arquitectura, qué está hecho y qué falta. |
+| [`docs/PLAN-fuegos-y-extintores.md`](docs/PLAN-fuegos-y-extintores.md) | Diseño de fondo: clases de fuego A/B/C/K, agentes, matriz de efectividad, pared de recarga. |
+| [`docs/CREDITS.md`](docs/CREDITS.md) | Licencias de los assets de terceros (varios CC-BY: hay que acreditar). |
+
+**La escena del juego es `Assets/Scenes/Training.unity`** (primera en Build Settings).
+`SampleScene.unity` quedó como sandbox y está deshabilitada en el build.
+
+⚠️ **Ante "el código está pero no funciona", correr `Extintores ▸ Validate Setup` ANTES de tocar
+código.** El cableado de escena falla en silencio: los bugs de agosto 2026 (manager duplicado,
+componente equivocado, sensor sin `isTrigger`, prefab desactualizado) no daban ni error de
+compilación ni excepción, simplemente no pasaba nada. Para cambios de escena usar un editor tool
+(`SerializedObject` + `Undo`), nunca editar el YAML a mano — eso fue justamente la causa raíz.
+
 ## Entorno
 
 | Ítem | Valor |
@@ -77,6 +96,13 @@ Comportamiento resultante (sin superposiciones):
 
 ## Gotchas / notas aprendidas
 
+- **El tracking origin (`_trackingOriginType`) está en `OVRManager`, NO en `OVRCameraRig`.** Los dos
+  componentes viven en el mismo GameObject del prefab, así que es fácil apuntarle al equivocado —
+  y `SerializedObject.FindProperty` devuelve `null` sin avisar. El default del prefab del SDK es
+  **EyeLevel**, que deja los ojos al ras del piso; el juego lo quiere en **FloorLevel**. Lo corrige
+  `Extintores ▸ Fix Scene Wiring` (helper `Editor/OvrTrackingOrigin.cs`).
+- **No colgar carteles del `CenterEyeAnchor`**: quedan clavados a la cara, giran exacto con la cabeza
+  y no se pueden leer. Usar `BodyLockedPanel` (seguimiento con zona muerta).
 - **`OVRControllerPrefab` trae `m_controller` con un valor viejo inválido** (`33554432`) que no
   corresponde a ningún valor del enum actual (`LTouch=1`, `RTouch=2`). Hay que setear el
   `Controller` explícitamente en cada instancia; si no, el control no se dibuja y no hay error.
@@ -88,6 +114,78 @@ Comportamiento resultante (sin superposiciones):
   quedan quietos y parece que está roto. Probar SIEMPRE con Build and Run en el dispositivo.
 - Ante pérdida de tracking, el sistema puede reportar falsamente `ControllerNotInHand`. No
   disparar lógica irreversible (ej: "se cayó el extintor") solo con esa señal.
+- **Los materiales del pack usan shaders Built-in → salen ROSA/magenta en URP.**
+  `fire_extinguisher_tank.mat` y `Glass_part.mat` venían con shader legacy
+  (`m_Shader: {fileID: 3/30, guid: 0000000000000000f000000000000000}`). Se convirtieron a
+  `Universal Render Pipeline/Lit` (`guid 933532a4fcc9baf4fa0491de14d08ed7`), mapeando `_MainTex`
+  → `_BaseMap`. Ojo: otros packs importados (p. ej. props sueltos) pueden tener el mismo
+  problema; convertir con el Render Pipeline Converter o cambiando el shader a URP/Lit.
+- **El modelo NO tiene boquilla/manguera: hay que crearla o importar otro modelo.** El FBX
+  `Assets/Fire_Extinguisher/fire extinguisher.fbx` (de un pack "Police") contiene SOLO dos
+  Models: `FireExtinguisher` (tanque) y `Glass_Part` (visor del manómetro). No hay malla de
+  boquilla ni de palanca. ⚠️ El `.meta` del FBX lista `Object003`/`Object004` en
+  `fileIDToRecycleName`, pero son nombres OBSOLETOS de una versión anterior del FBX que fue
+  sobreescrita; el binario actual no los tiene (verificado con `strings`). Reinstanciar el FBX
+  NO agrega la boquilla. Para tenerla: modelar una simple con primitivas (cono/cilindro en
+  `NozzleTip`) o importar un modelo de extintor más completo.
+- **`RightHandAnchor`/`LeftHandAnchor` NO siguen el mando físico en multimodal.** El
+  `OVRCameraRig` los mueve a `GetLocalControllerPosition(GetActiveControllerForHand(...))`, y
+  `GetActiveControllerForHand` **da prioridad a la mano rastreada**. Un objeto acoplado a ese
+  anchor "se pega a la mano", no al mando. Para un prop con el mando atado (extintor), seguir la
+  pose del mando físico directamente: `OVRInput.GetLocalControllerPosition(RTouch/LTouch)` en el
+  espacio de `TrackingSpace`. Eso hace `ExtinguisherMount.followController` (activo por defecto).
+
+## Chorro / boquilla — esquema a DOS MANOS
+
+Uso realista: el **tanque va en la mano derecha** (`ExtinguisherRig`, `MountHand.Right`) y la
+**boquilla/manguera en la izquierda** (`Assets/Prefabs/NozzleRig.prefab`, `MountHand.Left`,
+`followController`). El disparo lo hace el **grip del mando DERECHO** (simula apretar la palanca)
+y la espuma sale de la boquilla izquierda.
+
+- `NozzleRig` = mount izquierdo + `Visual` (Hose/Horn con cilindros primitivos, material del
+  tanque) + `NozzleTip` con `ExtinguisherSpray`. Se arrastra a la escena y sigue el mando
+  izquierdo solo (el mount, si no tiene anchor/trackingSpace, busca `OVRCameraRig.trackingSpace`
+  con `FindFirstObjectByType`).
+- `ExtinguisherSpray` (en `NozzleTip`): crea su propio `ParticleSystem` por código (textura de
+  punto suave generada en runtime, material `Sprites/Default` → sin depender de assets del pack).
+  El chorro sale por el **+Z** del `NozzleTip`. Lee `OVRInput.Get(Axis1D.PrimaryHandTrigger,
+  RTouch)` (grip). Expone `IsSpraying` para la futura lógica de apagado de fuegos.
+- Calibración: offset de la boquilla en `NozzleRig > ExtinguisherMount` (Position/Rotation
+  Offset); parámetros del chorro (rate, speed, size, cono) en `NozzleTip > ExtinguisherSpray`.
+- **Densidad de la nube**: la manda `maxRate` (partículas/s). Los defaults del `.cs` NO alcanzan —
+  los campos están serializados en `NozzleRig.prefab` y ganan sobre ellos; cambiarlos sin tocar el
+  prefab no hace nada y no avisa. Para eso está `Extintores ▸ Tune Spray Density`, que reescribe el
+  prefab con las constantes `ExtinguisherSpray.Default*`. Al subir la densidad hay que **bajar el
+  alpha del tint**: cada partícula es un billboard traslúcido y lo que se paga en el Quest es el
+  overdraw, no la cantidad. El techo de partículas vivas se deriva de `maxRate × lifetime`, así que
+  no hay que acordarse de subir `maxParticles`.
+- **Subir la densidad NO debe apagar los fuegos más rápido.** `FireSource` cobra el daño *por
+  partícula*, así que triplicar el caudal triplicaba la velocidad de apagado — un desbalanceo del
+  ejercicio que ningún error delata. Por eso `FireSource` divide por `ExtinguisherSpray.ReferenceRate`
+  (220 p/s, el caudal con el que se calibró `healthPerParticle`): la densidad es una decisión
+  visual y el ritmo de apagado lo sigue fijando `healthPerParticle`.
+
+## Configuración del usuario (menú del lobby)
+
+`GameSettings` (estático, PlayerPrefs) guarda volumen, vibración y la calibración del prop; lo
+edita `SettingsMenu` (botón CONFIGURACIÓN del menú). Reglas:
+
+- **`OVRInput.SetControllerVibration` NO VIBRA en este proyecto.** Con el backend OpenXR de Unity,
+  el action set de háptica de OVRPlugin no se engancha a la sesión: cada llamada deja
+  `XR_ERROR_ACTIONSET_NOT_ATTACHED` en el log y nada más. Tampoco sirvió buscar el mando con
+  `UnityEngine.XR.InputDevices` filtrando por `Controller|HeldInHand`: no devolvió ninguno. Usar
+  siempre `Haptics.Set/Stop/Pulse`: va por el **Input System** (acción ligada a
+  `<XRController>{RightHand}/{Haptic}` → `OpenXRInput.SendHapticImpulse`) y respeta el switch.
+  Si no vibra, el log `[Haptics]` lista los dispositivos XR que veía el juego.
+- **No mandar `Haptics.Stop` en cada frame**: corta los pulsos de todos los demás en ese mando. El
+  chorro lo hacía con el gatillo suelto y ningún pulso llegaba a sentirse.
+- La calibración NO toca `positionOffset`/`rotationOffset` (esos son la calibración de fábrica de la
+  abrazadera): `ExtinguisherMount` suma encima la rotación del usuario (X/Y/Z, pivotando en el
+  `GripPoint`) y un deslizamiento sobre el eje del prop (`userSlide`/`slideAxis`; tanque = +Y del
+  `GripPoint`, boquilla = +Z).
+- El panel de extintores tampoco se mueve tocando los `PanelAnchor`: `TrainingSession.ApplyPanelPose`
+  suma `GameSettings.PanelOffset` en el espacio del anchor. El `SettingsPanel` es 100 % generado;
+  si se le agrega un campo a `SettingsMenu`, sumarlo a `RequiredRefs` y `Fix Scene Wiring` lo rehace.
 
 ## API útil para la lógica del extintor
 
@@ -100,6 +198,23 @@ OVRInput.ControllerInHandState state =
 
 ## Build
 
-1. Conectar el Quest por USB, aceptar "Allow USB debugging" dentro del visor.
-2. `File > Build Profiles` → **Meta Quest** → seleccionar el visor en Run Device.
-3. **Build and Run** (la primera build compila shaders + Gradle, tarda).
+Detalle completo (requisitos, instalación, troubleshooting): [`docs/BUILD-quest.md`](docs/BUILD-quest.md).
+
+Con el **editor cerrado**, desde la raíz del repo:
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools\build-quest.ps1 -Run
+```
+
+Compila el APK (`Build/Android/Extintores_v2.apk`), lo instala por `adb` y lo lanza en el visor.
+Sin flags sólo compila; `-Install` instala sin lanzar. La primera build tarda 15-30 min (shaders +
+IL2CPP); el log queda en `Logs/build-quest.log`.
+
+Desde el editor abierto: menú **Extintores ▸ Build APK (Quest)** (mismo APK, sin instalar).
+
+`Editor/QuestBuild.cs` fuerza antes de compilar ARM64 + IL2CPP + APK (no AAB) + un
+`applicationIdentifier` propio (`com.rv.extintores`, el proyecto traía el del template URP). Sin
+eso el build "termina bien" pero no instala o arranca en negro. Firma con el debug keystore de
+Unity, que alcanza para sideload.
+
+A mano, como antes: `File > Build Profiles` → **Meta Quest** → visor en Run Device → **Build and Run**.
