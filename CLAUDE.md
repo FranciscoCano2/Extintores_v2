@@ -101,6 +101,15 @@ Comportamiento resultante (sin superposiciones):
   y `SerializedObject.FindProperty` devuelve `null` sin avisar. El default del prefab del SDK es
   **EyeLevel**, que deja los ojos al ras del piso; el juego lo quiere en **FloorLevel**. Lo corrige
   `Extintores ▸ Fix Scene Wiring` (helper `Editor/OvrTrackingOrigin.cs`).
+- **Aun con FloorLevel en la escena, el usuario podía aparecer HUNDIDO en el piso (a veces).** Con
+  OpenXR, `OVRManager` pide el origen de piso (`XRInputSubsystem.TrySetTrackingOriginMode(Floor)`)
+  **una sola vez** al iniciar; si el input subsystem todavía no arrancó loguea un error y sigue en
+  `Device` (eye level) → la cabeza nace en y≈0. Un recenter también puede mover el piso. Lo cubre
+  `FloorGuard` (lo maneja `TrainingSession`, sin cableado): re-pide el origen al arrancar, al
+  ponerse el visor, en recenter y en cambios de origen, y si los ojos quedan a < 0,5 m del piso
+  compensa la Y del rig (ojos a 1,6 m). Se evalúa sólo en esos momentos, NUNCA por frame: el
+  usuario se agacha frente al fuego y no hay que "levantarlo". `PlacePlayer` fija la Y del rig a la
+  del spawn. Diagnóstico en el visor: `adb logcat -s Unity | findstr FloorGuard`.
 - **No colgar carteles del `CenterEyeAnchor`**: quedan clavados a la cara, giran exacto con la cabeza
   y no se pueden leer. Usar `BodyLockedPanel` (seguimiento con zona muerta).
 - **`OVRControllerPrefab` trae `m_controller` con un valor viejo inválido** (`33554432`) que no
@@ -120,14 +129,9 @@ Comportamiento resultante (sin superposiciones):
   `Universal Render Pipeline/Lit` (`guid 933532a4fcc9baf4fa0491de14d08ed7`), mapeando `_MainTex`
   → `_BaseMap`. Ojo: otros packs importados (p. ej. props sueltos) pueden tener el mismo
   problema; convertir con el Render Pipeline Converter o cambiando el shader a URP/Lit.
-- **El modelo NO tiene boquilla/manguera: hay que crearla o importar otro modelo.** El FBX
-  `Assets/Fire_Extinguisher/fire extinguisher.fbx` (de un pack "Police") contiene SOLO dos
-  Models: `FireExtinguisher` (tanque) y `Glass_Part` (visor del manómetro). No hay malla de
-  boquilla ni de palanca. ⚠️ El `.meta` del FBX lista `Object003`/`Object004` en
-  `fileIDToRecycleName`, pero son nombres OBSOLETOS de una versión anterior del FBX que fue
-  sobreescrita; el binario actual no los tiene (verificado con `strings`). Reinstanciar el FBX
-  NO agrega la boquilla. Para tenerla: modelar una simple con primitivas (cono/cilindro en
-  `NozzleTip`) o importar un modelo de extintor más completo.
+- **El tanque ya NO es el FBX del pack.** `Assets/Fire_Extinguisher/fire extinguisher.fbx` (pack
+  "Police", sin boquilla ni palanca, estirado a 48 × 15 cm por `ExtinguisherSizer`) queda en el repo
+  sólo para `SampleScene`. El juego usa el modelo propio del extintor real (ver "Modelo del extintor").
 - **`RightHandAnchor`/`LeftHandAnchor` NO siguen el mando físico en multimodal.** El
   `OVRCameraRig` los mueve a `GetLocalControllerPosition(GetActiveControllerForHand(...))`, y
   `GetActiveControllerForHand` **da prioridad a la mano rastreada**. Un objeto acoplado a ese
@@ -142,8 +146,8 @@ Uso realista: el **tanque va en la mano derecha** (`ExtinguisherRig`, `MountHand
 `followController`). El disparo lo hace el **grip del mando DERECHO** (simula apretar la palanca)
 y la espuma sale de la boquilla izquierda.
 
-- `NozzleRig` = mount izquierdo + `Visual` (Hose/Horn con cilindros primitivos, material del
-  tanque) + `NozzleTip` con `ExtinguisherSpray`. Se arrastra a la escena y sigue el mando
+- `NozzleRig` = mount izquierdo + `Visual` (`Boquilla`, el modelo de `Boquilla.fbx`, con el
+  conector `HoseInlet`) + `NozzleTip` con `ExtinguisherSpray` + `HoseTube` (la manguera). Se arrastra a la escena y sigue el mando
   izquierdo solo (el mount, si no tiene anchor/trackingSpace, busca `OVRCameraRig.trackingSpace`
   con `FindFirstObjectByType`).
 - `ExtinguisherSpray` (en `NozzleTip`): crea su propio `ParticleSystem` por código (textura de
@@ -158,12 +162,46 @@ y la espuma sale de la boquilla izquierda.
   prefab con las constantes `ExtinguisherSpray.Default*`. Al subir la densidad hay que **bajar el
   alpha del tint**: cada partícula es un billboard traslúcido y lo que se paga en el Quest es el
   overdraw, no la cantidad. El techo de partículas vivas se deriva de `maxRate × lifetime`, así que
-  no hay que acordarse de subir `maxParticles`.
+  no hay que acordarse de subir `maxParticles`. Valores actuales (01/10/2026): 1000 p/s, vida
+  0,7 s, tamaño final 0,32 m, alpha 0,22.
 - **Subir la densidad NO debe apagar los fuegos más rápido.** `FireSource` cobra el daño *por
   partícula*, así que triplicar el caudal triplicaba la velocidad de apagado — un desbalanceo del
   ejercicio que ningún error delata. Por eso `FireSource` divide por `ExtinguisherSpray.ReferenceRate`
   (220 p/s, el caudal con el que se calibró `healthPerParticle`): la densidad es una decisión
   visual y el ritmo de apagado lo sigue fijando `healthPerParticle`.
+
+## Modelo del extintor (1 kg real) y manguera
+
+El tanque es un modelo **propio y paramétrico** del extintor real del usuario (ABC 1 kg de auto:
+34,8 cm de alto, Ø 7,65 cm, salida de la válvula a 29,8 cm; lo demás estimado de las fotos).
+
+- **Fuente:** `tools/blender/extintor_1kg.py` (dict `P` con todas las medidas). Se regenera con
+  `powershell -ExecutionPolicy Bypass -File toolslenderuild-extintor.ps1 [-Render]` (Blender 4.5 en
+  background, sin Unity). Salidas en `Assets/Extintores/Extinguisher/Real/`: `Extintor_1kg.fbx`
+  (`Body` tintable · `Details` bronce/manómetro con atlas de 512 px · `Label` banda para las etiquetas ·
+  empty `HoseOutlet`; 1.372 triángulos), `Boquilla.fbx` (origen en la punta, empty `HoseInlet`) y
+  `models/print/extintor_1kg.stl` para **imprimir** (un solo sólido cerrado, 0 aristas no-manifold,
+  en **milímetros**; 34,8 cm no entra en camas de 22–25 cm).
+- **Si cambiás una medida de `P`, revisá las constantes `NewNeckY`/`NewTopY` de `ExtinguisherModelTool`**
+  (son las mismas alturas) y volvé a correr el Swap.
+- **La calibración del prop no se tocó al cambiar de modelo.** `GripPoint`, offsets del mount y los
+  defaults de `GameSettings` se midieron con el modelo viejo, y lo que coincidía con el real era la
+  **válvula/agarre**. `Extintores ▸ Swap Extinguisher Model (1 kg real)` coloca el modelo nuevo debajo del
+  GripPoint con el mismo eje, el centro de la cabeza (válvula + palanca) a la misma altura y la salida
+  para el mismo lado (−X del rig) — y no guarda el prefab si el GripPoint se mueve. `Preview Extinguisher
+  Swap` renderiza viejo vs nuevo + el mando en `Logs/ExtinguisherPreview/`.
+- Se **quitó `ExtinguisherSizer`** del `Visual`: es `[ExecuteAlways]` y en `OnEnable` reescalaría el
+  modelo (que ya viene a escala real) a 48 cm, arrastrando el GripPoint. Validate lo marca si vuelve.
+- Material tintable liso `M_Extinguisher_Paint` (sin textura: `_BaseColor` = color del agente).
+  `ExtinguisherBodyTool.BodyMaterial` apunta ahí; el gris desaturado del pack sólo sirve para las UV
+  del modelo viejo.
+- **Manguera** (`ExtinguisherHose`, en `NozzleRig/HoseTube`): tubo de 60 cm sobre una Bézier cúbica
+  `HoseOutlet` → `HoseInlet`, con la caída resuelta para que el **largo de arco sea fijo**; si las manos
+  se separan más que eso queda recta (no hay de dónde sacar manguera: los dos extremos van atados a
+  mandos). 16 tramos × 8 lados, malla reutilizada, cero allocs, sin collider (no frena el chorro ni
+  la ve el láser), sin sombras. Al colgar del NozzleRig, `FixNozzleTint` la tiñe con el extintor.
+  Su `outlet` es una referencia de escena entre dos prefabs: la cablea `Fix Scene Wiring` (`FixHose`),
+  y en runtime cae al hijo `HoseOutlet` del `ExtinguisherSwappable` si falta.
 
 ## Configuración del usuario (menú del lobby)
 
@@ -183,6 +221,11 @@ edita `SettingsMenu` (botón CONFIGURACIÓN del menú). Reglas:
   abrazadera): `ExtinguisherMount` suma encima la rotación del usuario (X/Y/Z, pivotando en el
   `GripPoint`) y un deslizamiento sobre el eje del prop (`userSlide`/`slideAxis`; tanque = +Y del
   `GripPoint`, boquilla = +Z).
+- **Los defaults de la calibración del usuario NO son cero**: son la calibración medida con el prop
+  real (`GameSettings.Default*`: altura −22 cm, rotación Y 65°, desplazamiento X/Z 2 cm). Si se
+  cambian, subir `GameSettings.SettingsVersion`: un visor con prefs guardadas no ve los defaults
+  nuevos si no se lo migra. Las prefs de las pruebas por Link (editor) viven en el registro:
+  `HKCU\Software\Unity\UnityEditor\DefaultCompany\Extintores_v2` (floats como QWORD de un double).
 - El panel de extintores tampoco se mueve tocando los `PanelAnchor`: `TrainingSession.ApplyPanelPose`
   suma `GameSettings.PanelOffset` en el espacio del anchor. El `SettingsPanel` es 100 % generado;
   si se le agrega un campo a `SettingsMenu`, sumarlo a `RequiredRefs` y `Fix Scene Wiring` lo rehace.

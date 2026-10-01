@@ -94,7 +94,24 @@ namespace Extintores.EditorTools
             Debug.Log($"[QuestBuild] Compilando {scenes.Length} escena(s) → {full}" +
                       (development ? " (development build)" : ""));
 
-            var report = BuildPipeline.BuildPlayer(options);
+            // versionCode = fecha y hora del build (yyMMddHHmm/10 → entra en un int): identifica qué
+            // APK quedó instalado (adb shell dumpsys package com.rv.extintores | findstr version) y
+            // nunca es menor que el anterior, así que se instala encima sin desinstalar. Se restaura
+            // al terminar para no ensuciar ProjectSettings con un cambio por build.
+            int previousCode = PlayerSettings.Android.bundleVersionCode;
+            int code = (int)(long.Parse(DateTime.Now.ToString("yyMMddHHmm")) / 10); // 2610011015 no entra en int
+            PlayerSettings.Android.bundleVersionCode = code;
+            Debug.Log($"[QuestBuild] Versión {PlayerSettings.bundleVersion} (versionCode {code}).");
+
+            BuildReport report;
+            try
+            {
+                report = BuildPipeline.BuildPlayer(options);
+            }
+            finally
+            {
+                PlayerSettings.Android.bundleVersionCode = previousCode;
+            }
             var s = report.summary;
 
             if (s.result == BuildResult.Succeeded)

@@ -58,7 +58,21 @@ desinstalar primero la versión vieja.
 
 ## Instalación manual (otra PC, SideQuest, entrega del .apk)
 
-El APK es autocontenido: se puede copiar y pasar a cualquiera con el visor en modo desarrollador.
+El APK es autocontenido: una vez instalado **corre solo en el Quest, sin PC ni cable** (no es
+Link). Se puede copiar y pasar a cualquiera con el visor en modo desarrollador.
+
+**Con el script (recomendado), sin recompilar ni tener Unity:**
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools\install-quest.ps1 -Run
+```
+
+Toma `Build/Android/Extintores_v2.apk` (o `-Apk <ruta>`), instala con `adb install -r`, muestra el
+`versionCode` que quedó instalado y, con `-Run`, abre la app. Para llevarlo a **otra PC** sin el
+repo: copiar `install-quest.ps1` + el `.apk` a una carpeta; si esa PC no tiene `adb`, poner al lado
+la carpeta `platform-tools` (Android SDK Platform Tools) y el script la encuentra.
+
+**A mano:**
 
 ```bash
 adb install -r Build\Android\Extintores_v2.apk
@@ -66,6 +80,11 @@ adb install -r Build\Android\Extintores_v2.apk
 
 Si no hay `adb` en el PATH, está en
 `C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe`.
+Sin línea de comandos: **Meta Quest Developer Hub** o **SideQuest** (arrastrar el `.apk`).
+
+**Qué versión está instalada:** cada build lleva `versionCode` = fecha y hora de compilación
+(`yyMMddHHm`, p. ej. `261001153` = 01/10/26 15:3x) y `versionName` = `bundleVersion` de Player
+Settings. `adb shell dumpsys package com.rv.extintores | findstr version`.
 
 **La configuración del usuario** (volumen, vibración, calibración del mando/boquilla, posición del
 panel) vive en los PlayerPrefs de la app y **sobrevive a `adb install -r`**, que es lo que usa
@@ -85,6 +104,7 @@ entre las apps normales: si lo buscás ahí, no está.
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Hay una versión firmada con otra clave: `adb uninstall com.rv.extintores` y reinstalá. ⚠ Desinstalar borra la configuración del usuario: anotá la calibración antes. |
 | Instala pero arranca en negro | Casi siempre XR: revisá que OpenXR esté habilitado en Android y que estén los *Interaction Profiles* detached (ver `CLAUDE.md`). |
 | Los mandos no se ven / las manos no aparecen | Multimodal: `Launch Simultaneous H&C On Startup` tiene que estar **ON** en el OVRManager de la escena al momento de compilar. |
+| Aparecés hundido en el piso | Lo corrige solo `FloorGuard` (ver `CLAUDE.md`). Si persiste: `adb logcat -s Unity \| findstr FloorGuard` dice a qué altura quedaron los ojos y si el origen de piso falló. Si queda corrido unos centímetros (no hundido del todo), es el piso del visor: rehacer el límite (Guardian) ▸ *Confirmar altura del piso*. |
 | El build falla sin mensaje claro | `Logs/build-quest.log`, buscar `error CS` (compilación) o `BuildFailedException`. |
 
 ## Antes de entregar

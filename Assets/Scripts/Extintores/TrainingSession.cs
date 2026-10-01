@@ -101,8 +101,22 @@ namespace Extintores
             }
         }
 
-        private void OnEnable() => GameSettings.Changed += OnSettingsChanged;
-        private void OnDisable() => GameSettings.Changed -= OnSettingsChanged;
+        private void OnEnable()
+        {
+            GameSettings.Changed += OnSettingsChanged;
+            OVRManager.HMDMounted += OnHmdMounted;
+            OVRManager.TrackingOriginChangePending += OnTrackingOriginChangePending;
+        }
+
+        private void OnDisable()
+        {
+            GameSettings.Changed -= OnSettingsChanged;
+            OVRManager.HMDMounted -= OnHmdMounted;
+            OVRManager.TrackingOriginChangePending -= OnTrackingOriginChangePending;
+            if (OVRManager.display != null) OVRManager.display.RecenteredPose -= OnRecentered;
+            if (_input != null) _input.trackingOriginUpdated -= OnTrackingOriginUpdated;
+            _input = null;
+        }
 
         /// <summary>El ajuste del panel se ve al instante, esté en un puesto o en la vista previa.</summary>
         private void OnSettingsChanged()
@@ -115,6 +129,86 @@ namespace Extintores
             foreach (var s in stations) if (s != null) s.Deactivate();
             if (continueButton != null) SetContinueVisible(false);
             ReturnToLobby();
+            StartCoroutine(SettleFloorAtStartup());
+        }
+
+        // ---------------------------------------------------------------- altura (ver FloorGuard)
+
+        /// <summary>Piso del lugar donde está el usuario (Y del spawn actual).</summary>
+        private float _floorY;
+        /// <summary>Compensación vertical vigente del rig; 0 con el origen de piso sano.</summary>
+        private float _heightFix;
+        private Coroutine _floorCheck;
+        private UnityEngine.XR.XRInputSubsystem _input;
+
+        /// <summary>
+        /// En el frame 0 la cabeza todavía no tiene pose: la ubicación del lobby de <see cref="Start"/>
+        /// se calcula con la cabeza en el origen. Se espera al tracking (o 5 s), se asegura el origen
+        /// de piso y se vuelve a ubicar al usuario con su pose real.
+        /// </summary>
+        private System.Collections.IEnumerator SettleFloorAtStartup()
+        {
+            float timeout = Time.realtimeSinceStartup + 5f;
+            while (!FloorGuard.HeadTracked && Time.realtimeSinceStartup < timeout) yield return null;
+
+            // Los eventos de OVRManager.display y del subsystem recién existen ahora.
+            if (OVRManager.display != null)
+            {
+                OVRManager.display.RecenteredPose -= OnRecentered;
+                OVRManager.display.RecenteredPose += OnRecentered;
+            }
+            _input = FloorGuard.InputSubsystem;
+            if (_input != null) _input.trackingOriginUpdated += OnTrackingOriginUpdated;
+
+            yield return CheckFloor("arranque");
+            if (!InSession && lobbySpawn != null) PlacePlayer(lobbySpawn);
+        }
+
+        private void OnHmdMounted() => RequestFloorCheck("visor puesto");
+        private void OnRecentered() => RequestFloorCheck("recenter");
+        private void OnTrackingOriginUpdated(UnityEngine.XR.XRInputSubsystem _) => RequestFloorCheck("origen actualizado");
+        private void OnTrackingOriginChangePending(OVRManager.TrackingOrigin origin, OVRPose? _) =>
+            RequestFloorCheck($"cambio de origen a {origin}");
+
+        private void RequestFloorCheck(string reason)
+        {
+            if (!isActiveAndEnabled) return;
+            if (_floorCheck != null) StopCoroutine(_floorCheck);
+            _floorCheck = StartCoroutine(CheckFloor(reason));
+        }
+
+        private System.Collections.IEnumerator CheckFloor(string reason)
+        {
+            if (!FloorGuard.EnsureFloorOrigin(out string origin))
+                Debug.LogWarning($"[FloorGuard] ({reason}) {origin}.");
+            else if (origin != "origen de piso OK")
+                Debug.Log($"[FloorGuard] ({reason}) {origin}.");
+
+            // El cambio de origen recién se ve en la pose de la cabeza un par de frames después.
+            for (int i = 0; i < 3; i++) yield return null;
+
+            ApplyHeightFix(reason);
+            _floorCheck = null;
+        }
+
+        /// <summary>Recalcula la compensación con la altura de ojos que reporta el tracking.</summary>
+        private void ApplyHeightFix(string reason)
+        {
+            if (playerRig == null || centerEye == null || !FloorGuard.HeadTracked) return;
+
+            // Altura de los ojos sobre el ORIGEN del rig: es lo que reporta el tracking, sin la
+            // compensación (que vive en la Y del rig, no en el tracking).
+            float raw = centerEye.position.y - playerRig.position.y;
+            float fix = FloorGuard.HeightFix(raw);
+
+            if (!Mathf.Approximately(fix, _heightFix))
+                Debug.LogWarning($"[FloorGuard] ({reason}) ojos a {raw:0.00} m del origen del rig → " +
+                                 $"compensación {_heightFix:0.00} → {fix:0.00} m.");
+            _heightFix = fix;
+
+            Vector3 p = playerRig.position;
+            playerRig.position = new Vector3(p.x, _floorY + _heightFix, p.z);
+            Debug.Log($"[FloorGuard] ({reason}) ojos a {centerEye.position.y - _floorY:0.00} m del piso.");
         }
 
         // ---------------------------------------------------------------- arranque de modos
@@ -273,10 +367,16 @@ namespace Extintores
         /// la persona esté parada dentro de él. Mover el rig al punto dejaría al usuario corrido esa
         /// misma distancia, así que se compensa el offset de la cabeza (solo en XZ; la altura la
         /// pone el tracking) y se rota el rig ALREDEDOR de la cabeza para alinear el yaw.
+        ///
+        /// La Y del rig se fija explícitamente al piso del spawn (más la compensación de
+        /// <see cref="FloorGuard"/>): antes no se tocaba y cualquier corrimiento vertical del rig
+        /// quedaba para siempre.
         /// </summary>
         private void PlacePlayer(Transform target)
         {
             if (playerRig == null || target == null) return;
+
+            _floorY = target.position.y;
 
             if (centerEye != null)
             {
@@ -286,10 +386,15 @@ namespace Extintores
                 Vector3 offset = target.position - centerEye.position;
                 offset.y = 0f;
                 playerRig.position += offset;
+
+                Vector3 p = playerRig.position;
+                playerRig.position = new Vector3(p.x, _floorY + _heightFix, p.z);
+                if (FloorGuard.HeadTracked) ApplyHeightFix("reubicación");
             }
             else
             {
-                playerRig.SetPositionAndRotation(target.position, Quaternion.Euler(0f, target.eulerAngles.y, 0f));
+                playerRig.SetPositionAndRotation(target.position + Vector3.up * _heightFix,
+                                                 Quaternion.Euler(0f, target.eulerAngles.y, 0f));
             }
         }
 

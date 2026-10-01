@@ -3,7 +3,7 @@
 > Documento vivo. Cubre la fase que convierte el sistema de fuegos en un **ejercicio** con menú,
 > modos y puestos. Para el diseño previo (clases de fuego, agentes, matriz, pared de recarga) ver
 > `PLAN-fuegos-y-extintores.md`; para el detalle técnico XR/OVR ver `../CLAUDE.md`.
-> Estado: **septiembre 2026** · Unity 6000.5.4f1 · URP 17.5 · OpenXR multimodal · Quest.
+> Estado: **octubre 2026** · Unity 6000.5.4f1 · URP 17.5 · OpenXR multimodal · Quest.
 
 ## 1. Por qué existe esta fase
 
@@ -82,6 +82,14 @@ La **octava** ronda, sobre lo mismo:
 | "La boquilla tiene que cambiar de color con el extintor" | La boquilla vive en OTRO rig (mano izquierda), así que `ExtinguisherSwappable` no la alcanzaba; además usaba la textura ROJA del pack, sobre la que cualquier tinte da negro. Ahora usa el material tintable y se cablea en `extraBodyRenderers`. |
 | "El panel, 20 cm más atrás y 30 cm a la derecha" | `PanelForward` 1,6 m y `PanelSide` 1,3 m (a ~2,1 m del usuario, ~39° a la derecha). |
 
+La **novena** ronda (01/10) fue de assets, no de bugs:
+
+| Pedido | Qué implicó |
+|---|---|
+| El extintor virtual tiene que ser el real (ABC 1 kg de auto) | El del pack, estirado por `ExtinguisherSizer`, medía **48 × 15 cm** contra 34,8 × 7,65 del real, y no tenía boquilla. Modelo propio y paramétrico en Blender (`tools/blender/extintor_1kg.py`), también como STL para imprimir. |
+| …sin romper la calibración medida con el prop | Los defaults se midieron con el modelo viejo y lo que coincidía era la **válvula/agarre**. El modelo nuevo se colocó debajo del `GripPoint` con el mismo eje y el centro de la cabeza a la misma altura: el GripPoint no se movió (verificado a 0,1 mm) y `GameSettings` no se tocó. El fondo quedó 12 cm más arriba y el mando a ~12 cm sobre la base. |
+| Una manguera continua de la válvula a la boquilla | Son dos rigs (dos mandos). `ExtinguisherHose` rehace cada frame un tubo de **largo fijo** (60 cm) sobre una Bézier con caída; con las manos más separadas que eso, queda recta en vez de estirarse. |
+
 ## 2. Decisiones tomadas (y por qué)
 
 - **Los botones se apuntan con un LÁSER, no con el chorro.** El chorro se probó primero y falló por
@@ -126,7 +134,14 @@ La **octava** ronda, sobre lo mismo:
 - **El orden de dibujo de los carteles se fija con `sortingOrder`, no con `renderQueue`.** URP
   revalida los materiales y devuelve la cola a la del Surface Type; el `sortingOrder` es del
   renderer y sobrevive.
-- **La boquilla es parte del extintor**: se pinta del mismo color y cambia con él.
+- **La boquilla es parte del extintor**: se pinta del mismo color y cambia con él. La manguera también.
+- **El extintor virtual es el del usuario, a escala real** (ABC 1 kg de auto). Lo que se sostiene
+  tiene que medir lo mismo que lo que se ve: con el prop en la mano, un tanque el doble de ancho
+  rompe la ilusión. El modelo es paramétrico (Blender por script) para poder ajustarlo midiendo.
+- **Al cambiar de modelo se conserva el agarre, no las medidas del modelo viejo.** La calibración
+  es la relación mando ↔ prop real; el modelo se coloca para respetarla, nunca al revés.
+- **La manguera tiene largo fijo y no se estira.** Si las manos se separan más de 60 cm queda recta
+  y tensa: un tubo que se alarga como elástico se lee como un error del juego.
 - **El láser se ve apuntando al tablero entero**, no sólo a un botón: el tablero es el objeto con
   el que se interactúa, y el rayo apareciendo sólo sobre cada botón se sentía intermitente.
 - **El panel de extintores sólo existe donde hay fuego.** En el lobby se desactiva: no hay qué
@@ -318,15 +333,40 @@ Yard_Industrial            ← escenografía del pack: piso, muro, props por zon
       `Haptic`, común a todos los perfiles OpenXR del Quest, incluidos los *detached*).
 - [x] **Desplazamiento X/Z del tanque** (±15 cm, de a 1 cm), perpendicular a su eje; el eje largo
       sigue siendo la altura del mando.
-- [ ] Aplicar en la escena: `Fix Scene Wiring` rehace el `SettingsPanel` → Ctrl+S.
+- [x] Aplicar en la escena: `Fix Scene Wiring` rehace el `SettingsPanel` → Ctrl+S (verificado el
+      01/10 con `Validate Setup` en batchmode).
+- [x] **La calibración medida pasa a ser la de fábrica** (01/10): altura −22 cm, rotación Y 65°,
+      desplazamiento X/Z 2 cm. "Restablecer" vuelve ahí; `cfg.version` 2 migra los visores que ya
+      tenían prefs.
+- [x] **Chorro más denso** (01/10): 1000 p/s, vida 0,7 s, tamaño final 0,32 m, alpha 0,22. El
+      ritmo de apagado no cambia (`ReferenceRate`).
+- [x] **Hundido en el piso** (01/10): `FloorGuard` re-pide el origen de piso y compensa la altura si
+      los ojos quedan a < 0,5 m (ver `CLAUDE.md`). `Validate Setup` chequea los spawns contra el piso.
+- [x] **Build standalone** (01/10): `tools/install-quest.ps1` instala un APK ya compilado (otra PC,
+      sin Unity); `versionCode` = fecha y hora del build; versión 0.2.0.
+- [x] **Extintor real de 1 kg** (01/10): modelo paramétrico propio (`tools/blender/extintor_1kg.py`,
+      1.372 triángulos + boquilla de 320), STL cerrado en mm para imprimir, y `Extintores ▸ Swap
+      Extinguisher Model` aplicado en los prefabs y en `Training.unity` sin mover el GripPoint.
+- [x] **Manguera continua** (01/10): `ExtinguisherHose` de 60 cm entre `HoseOutlet` y `HoseInlet`,
+      teñida con el extintor, cableada y validada por `FixHose`.
+- [ ] **Visor — modelo y manguera** (ver checklist §6): la válvula virtual sobre la real sin tocar
+      Configuración; palanca y salida del lado correcto; la manguera cuelga natural y no tapa el
+      chorro; FPS con chorro + manguera.
+- [ ] Opcional: afinar medidas estimadas del modelo (largo de palanca y manija, Ø y altura del
+      manómetro) con una regla, en `P` de `extintor_1kg.py`.
+- [ ] Opcional: `--split` del STL en cuerpo + cabeza si la impresora no llega a 34,8 cm.
+- [ ] Probar en el visor: arrancar varias veces + recenter sin quedar hundido; nube más densa sin
+      caída de FPS; extintor bien ubicado sin tocar Configuración.
 - [ ] Confirmar en el visor que vibra; si no, pasar las líneas `[Haptics]` del log.
 - [ ] Probar en el visor que la configuración **persiste**: cambiar algo, cerrar la app del todo,
       abrirla y ver que sigue igual (también tras reinstalar con `build-quest.ps1`). El log
       `[GameSettings] Cargado: …` muestra lo leído al arrancar.
 
-- [ ] **Aplicar la séptima y la octava ronda en la escena**: `Validate Setup` (tiene que marcar los
-      PanelAnchor, el collider del fondo del panel y la boquilla sin teñir) → `Fix Scene Wiring` →
-      Ctrl+S → `Validate Setup` en cero.
+- [x] **Aplicar la séptima y la octava ronda en la escena** (verificado el 01/10: `Validate Setup`
+      no marca nada de esto).
+- [ ] `Validate Setup` marca 3 despejes del patio: `Cargo_container_v1_LD1open` a < 1,8 m del fuego
+      de Zone_B, y `Cargo_container_v1_LD1close` a < 1,8 m del fuego de Zone_K y tapando su panel.
+      Correr esos contenedores en la tabla `Props` de `YardBuilder.cs`.
 - [ ] **Build & Run en el Quest** — imprescindible: por Link no llegan ni la colisión de partículas
       ni la pose de los mandos. Checklist en §6.
 - [ ] Ajustar en el visor: comodidad del HUD (`BodyLockedPanel`: `distance` 1,5 m, `heightOffset`
@@ -416,6 +456,15 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
       aguanta con el grip a fondo apuntando de cerca — es el peor caso de overdraw.
 - [ ] El menú, el HUD y los rótulos de los botones **se leen contra el cielo** (el blockout tenía
       paredes grises atrás; ahora puede haber cielo brillante).
+- [ ] **Modelo de 1 kg**: con la calibración de fábrica (sin tocar Configuración) la válvula y la
+      palanca virtuales caen sobre las reales, y el tanque virtual no "sobra" alrededor del real.
+- [ ] La palanca y la salida de la válvula quedan **del mismo lado** que en el prop.
+- [ ] La **etiqueta** se lee derecha (no espejada) y cambia con el tipo de extintor.
+- [ ] La **manguera** sale de la válvula y entra por atrás de la boquilla; con las manos juntas
+      cuelga, separándolas se tensa y a más de 60 cm queda recta **sin engordar ni estirarse raro**.
+- [ ] La manguera **no tapa el chorro** ni el láser, y el chorro sigue apagando a través del panel.
+- [ ] Manguera y boquilla cambian de color con el extintor (también el K plateado).
+- [ ] Sin tirones de FPS por la manguera (es una malla de 256 triángulos que se reescribe por frame).
 - [ ] Ningún prop del patio tapa un fuego, el panel o el menú, y no se ven bordes del piso ni
       hangares "huecos" desde ningún puesto.
 
@@ -480,6 +529,15 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
 - **Reparar prefabs por el asset**, con `PrefabUtility.LoadPrefabContents` → `SaveAsPrefabAsset`.
   Re-ejecutar un builder que hace `SaveAsPrefabAsset` sobre una raíz nueva sobreescribe el asset y
   le rompe los overrides a las instancias ya colocadas.
+- **Un tool que busca un prefab anidado por su fuente puede fallar en silencio.** Dentro de
+  `LoadPrefabContents`, `GetCorrespondingObjectFromSource` no devolvió el FBX viejo: el primer Swap
+  dejó los DOS modelos puestos, el viejo a escala 1:1 (2 m), y el único síntoma fue un `SwapSensor`
+  de 1 × 2 m en el log. Ahora se busca por las mallas. Leé siempre las líneas `FIX` del log.
+- **Una malla armada por código va en orden HORARIO visto desde afuera.** La manguera salió del
+  revés con (a, b, a+1): se veían las caras internas y nada fallaba. Antes de dar por buena una
+  malla generada, renderizala (el `Preview` del modelo deja el patrón para hacerlo en batch).
+- **`Unity -batchmode` puede tardar 5 min extra al salir** ("Timeout … waiting async operations") y
+  devolver código 1 aunque el método haya terminado bien: mirá el log, no el código de salida.
 - **Medir siempre el tri-count de un asset nuevo** con `Extintores ▸ Optimize FireCause Models`. El
   cartón de clase A traía 1,98 M de triángulos —100× los otros props juntos— y nada lo delataba
   salvo el tamaño del archivo.
@@ -503,4 +561,6 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
 | `Extintores ▸ Fix Sketchfab Textures` | Corrige importadores de textura de los props. |
 | `Extintores ▸ Add ABC Label to Selected` | Pega la calcomanía ABC en el tanque. |
 | `Extintores ▸ Tune Spray Density` | Reescribe los parámetros del chorro en `NozzleRig.prefab` con las constantes del script. Sin esto, cambiar los defaults del `.cs` no mueve la densidad. |
+| `Extintores ▸ Preview Extinguisher Swap` | Renders del modelo viejo vs el de 1 kg + el mando calibrado, en `Logs/ExtinguisherPreview/`. No modifica nada. |
+| `Extintores ▸ Swap Extinguisher Model (1 kg real)` | Pone el modelo propio en `ExtinguisherRig`/`NozzleRig` (+ conectores y manguera) sin mover el GripPoint, y repara/guarda `Training.unity`. Idempotente. |
 | `Extintores ▸ Build APK (Quest)` | Compila el APK de sideload (ARM64 + IL2CPP). Ver [`BUILD-quest.md`](BUILD-quest.md). |

@@ -45,7 +45,11 @@ Estas son las que instancia `FirePrefabBuilder` en `Fire_A/B/C/K`:
 - **RPG/FPS Game Assets for PC/Mobile (Industrial Set v2.0)** — Unity Asset Store (productId 86679)
   — Asset Store EULA (gratis). Escenario del patio: muros, containers, hangares, tanques, props y
   skybox. Está en `Assets/RPG_FPS_game_assets_industrial/`; lo arma `Extintores ▸ Build Industrial Yard`.
-- Extintor: FBX de pack "Police" (ver `CLAUDE.md`) — revisar/registrar licencia de origen.
+- **Extintor y boquilla del juego: modelo propio**, sin assets de terceros. Lo genera
+  `tools/blender/extintor_1kg.py` a partir de las medidas del extintor real (también el STL para
+  imprimir y el atlas del manómetro). La manguera se genera en runtime (`ExtinguisherHose`).
+- Extintor viejo: FBX de pack "Police" (`Assets/Fire_Extinguisher/`) — **ya no lo usa el juego**
+  (sólo `SampleScene`). Si se lo vuelve a usar, revisar/registrar la licencia de origen.
 
 ## Alternativas descargadas (no usadas por los prefabs)
 - "VR-Ready Fuse Box" (<https://skfb.ly/pxXKE>) by Jimmy Johansson — **CC-BY.**

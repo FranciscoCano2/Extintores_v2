@@ -98,7 +98,9 @@ namespace Extintores.EditorTools
             var fireManager = FixFireManagers(apply);
             var training = FixTrainingManager(apply, fireManager, spray);
             FixSwapSensor(apply, swappable);
+            FixHose(apply, swappable, spray); // antes del tinte: la manguera es una pieza más de la boquilla
             FixSwappableWiring(apply, swappable, spray);
+            CheckExtinguisherModel(swappable, spray);
             FixLaser(apply, spray);
             FixStationPrefab(apply, station);
             FixBoardTranslucency(apply);
@@ -394,6 +396,142 @@ namespace Extintores.EditorTools
                 else b.Encapsulate(r.bounds);
             }
             return any ? b : (Bounds?)null;
+        }
+
+        // ------------------------------------------------------------------ manguera
+        /// <summary>
+        /// Manguera continua tanque ↔ boquilla. Vive como hijo del NozzleRig (así <see cref="FixNozzleTint"/>
+        /// la tiñe con el extintor) y une dos conectores de rigs distintos: <c>HoseOutlet</c> en el
+        /// tanque y <c>HoseInlet</c> en la boquilla, que crea <c>Extintores ▸ Swap Extinguisher Model</c>.
+        /// No puede tener collider ni estar en las layers del juego: frenaría el chorro o el láser
+        /// apuntaría a la manguera en vez de al botón, y ninguna de las dos cosas da error.
+        /// </summary>
+        private static void FixHose(bool apply, ExtinguisherSwappable sw, ExtinguisherSpray spray)
+        {
+            if (sw == null || spray == null) return;
+
+            var mount = spray.GetComponentInParent<ExtinguisherMount>();
+            var nozzleRoot = mount != null ? mount.transform : spray.transform;
+
+            var hoses = Object.FindObjectsByType<ExtinguisherHose>(FindObjectsInactive.Include);
+            if (hoses.Length > 1)
+            {
+                Problem($"Hay {hoses.Length} ExtinguisherHose en la escena: debe haber una sola (se dibujarían superpuestas).");
+                return;
+            }
+
+            ExtinguisherHose hose = hoses.Length == 1 ? hoses[0] : null;
+            if (hose == null)
+            {
+                if (!apply) { Problem("No hay manguera (ExtinguisherHose) entre el tanque y la boquilla."); return; }
+                var go = new GameObject("HoseTube");
+                Undo.RegisterCreatedObjectUndo(go, "Crear manguera");
+                go.transform.SetParent(nozzleRoot, false);
+                hose = Undo.AddComponent<ExtinguisherHose>(go);
+                Fixed($"Manguera 'HoseTube' creada bajo '{nozzleRoot.name}'.");
+            }
+            else if (!hose.transform.IsChildOf(nozzleRoot))
+            {
+                Problem($"La manguera '{Path(hose.transform)}' no cuelga del rig de la boquilla: no se tiñe con el extintor.");
+            }
+
+            var outlet = FindChild(sw.transform, ExtinguisherHose.OutletName);
+            var inlet = FindChild(nozzleRoot, ExtinguisherHose.InletName);
+            if (outlet == null)
+                Problem($"El tanque no tiene el conector '{ExtinguisherHose.OutletName}': corré 'Extintores ▸ Swap Extinguisher Model'.");
+            if (inlet == null)
+                Problem($"La boquilla no tiene el conector '{ExtinguisherHose.InletName}': corré 'Extintores ▸ Swap Extinguisher Model'.");
+
+            var so = new SerializedObject(hose);
+            var pOut = so.FindProperty("outlet");
+            var pIn = so.FindProperty("inlet");
+            if (pOut == null || pIn == null) { Problem("ExtinguisherHose sin los campos 'outlet'/'inlet' (¿se renombraron?)."); return; }
+
+            bool wired = outlet != null && inlet != null &&
+                         pOut.objectReferenceValue == outlet && pIn.objectReferenceValue == inlet;
+            if (outlet != null && inlet != null && !wired)
+            {
+                if (apply)
+                {
+                    SetRef(so, "outlet", outlet);
+                    SetRef(so, "inlet", inlet);
+                    so.ApplyModifiedProperties();
+                    Fixed("Manguera conectada: salida de la válvula ↔ entrada de la boquilla.");
+                }
+                else Problem("La manguera no está conectada a HoseOutlet/HoseInlet.");
+            }
+            else if (wired) Ok("Manguera conectada a la válvula y a la boquilla.");
+
+            var pLen = so.FindProperty("length");
+            if (pLen != null && (pLen.floatValue < 0.3f || pLen.floatValue > 1.2f))
+                Problem($"La manguera mide {pLen.floatValue:0.00} m: fuera de lo realista (0,3–1,2 m).");
+
+            foreach (var c in hose.GetComponentsInChildren<Collider>(true))
+            {
+                if (!apply) { Problem($"La manguera tiene un collider ('{c.name}'): frenaría el chorro o el láser."); continue; }
+                Undo.DestroyObjectImmediate(c);
+                Fixed("Collider quitado de la manguera.");
+            }
+
+            int layer = hose.gameObject.layer;
+            if (layer == LayerMask.NameToLayer("Fire") || layer == LayerMask.NameToLayer("Interactor") ||
+                layer == LayerMask.NameToLayer(SprayButton.LayerName))
+            {
+                if (!apply) Problem($"La manguera está en la layer '{LayerMask.LayerToName(layer)}': debe ir en Default.");
+                else
+                {
+                    Undo.RecordObject(hose.gameObject, "Layer de la manguera");
+                    hose.gameObject.layer = 0;
+                    Fixed("Manguera pasada a la layer Default.");
+                }
+            }
+
+            var mr = hose.GetComponent<MeshRenderer>();
+            if (mr != null && mr.shadowCastingMode != UnityEngine.Rendering.ShadowCastingMode.Off)
+            {
+                if (!apply) Problem("La manguera proyecta sombras: costo extra en el Quest por nada.");
+                else
+                {
+                    Undo.RecordObject(mr, "Sombras de la manguera");
+                    mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    Fixed("Sombras de la manguera apagadas.");
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ modelo del extintor
+        /// <summary>
+        /// El tanque tiene que ser el modelo propio a escala real (34,8 × 7,65 cm), no el del pack
+        /// estirado a 48 × 15 cm por <see cref="ExtinguisherSizer"/>. Sólo diagnostica: el cambio lo
+        /// hace <c>Extintores ▸ Swap Extinguisher Model</c>, que además conserva la calibración.
+        /// </summary>
+        private static void CheckExtinguisherModel(ExtinguisherSwappable sw, ExtinguisherSpray spray)
+        {
+            if (sw == null) return;
+
+            var body = FindBodyRenderer(sw);
+            var mf = body != null ? body.GetComponent<MeshFilter>() : null;
+            string bodyPath = mf != null && mf.sharedMesh != null ? AssetDatabase.GetAssetPath(mf.sharedMesh) : "";
+            if (bodyPath == ExtinguisherModelTool.ModelPath) Ok("El tanque es el modelo de 1 kg a escala real.");
+            else Problem($"El tanque usa '{bodyPath}' en vez de '{ExtinguisherModelTool.ModelPath}': " +
+                         "corré 'Extintores ▸ Swap Extinguisher Model (1 kg real)'.");
+
+            foreach (var sizer in sw.GetComponentsInChildren<ExtinguisherSizer>(true))
+                if (sizer.enabled)
+                    Problem($"'{Path(sizer.transform)}' tiene un ExtinguisherSizer activo: reescalaría el modelo " +
+                            "de 1 kg (que ya viene a escala real) y movería el GripPoint.");
+
+            int tris = ExtinguisherModelTool.TriangleCount(sw.transform);
+            if (tris > 5000) Problem($"El tanque tiene {tris} triángulos: demasiado para algo que está siempre en mano en el Quest.");
+            else Ok($"Tanque: {tris} triángulos.");
+
+            if (spray == null) return;
+            var mount = spray.GetComponentInParent<ExtinguisherMount>();
+            bool nozzle = false;
+            foreach (var f in (mount != null ? mount.transform : spray.transform).GetComponentsInChildren<MeshFilter>(true))
+                if (f.sharedMesh != null && AssetDatabase.GetAssetPath(f.sharedMesh) == ExtinguisherModelTool.NozzlePath) nozzle = true;
+            if (nozzle) Ok("La boquilla es la modelada (Boquilla.fbx).");
+            else Problem("La boquilla sigue siendo de cilindros primitivos: corré 'Extintores ▸ Swap Extinguisher Model (1 kg real)'.");
         }
 
         // ------------------------------------------------------------------ Swappable
@@ -970,6 +1108,16 @@ namespace Extintores.EditorTools
             if (!EditorSceneManager.SaveScene(scene))
                 Debug.LogError($"[SceneWiringFixer] No se pudo guardar {TrainingScenePath}.");
             Run(false); // el diagnóstico posterior queda en el log
+        }
+
+        /// <summary>
+        /// Sólo diagnostica <c>Training.unity</c> (no modifica ni guarda nada). Para batchmode:
+        /// <c>-executeMethod Extintores.EditorTools.SceneWiringFixer.ValidateTrainingSceneBatch</c>
+        /// </summary>
+        public static void ValidateTrainingSceneBatch()
+        {
+            EditorSceneManager.OpenScene(TrainingScenePath, OpenSceneMode.Single);
+            Run(false);
         }
 
         /// <summary>
@@ -1564,6 +1712,8 @@ namespace Extintores.EditorTools
                 if (s.PanelAnchor == null) Problem($"El puesto '{s.name}' no tiene PanelAnchor: el panel no se movería.");
             }
 
+            CheckSpawnHeights(session, stations);
+
             var buttons = Object.FindObjectsByType<SprayButton>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             if (buttons.Length == 0) Problem("No hay ningún SprayButton: no se puede navegar el menú.");
             else Ok($"{buttons.Length} botón(es) accionables con el chorro.");
@@ -1585,6 +1735,39 @@ namespace Extintores.EditorTools
                     Problem("FireManager.autoCollectOnStart está encendido: registraría los 4 fuegos " +
                             "y pisaría la etapa que arma TrainingSession. Debe estar apagado.");
             }
+        }
+
+        /// <summary>
+        /// <see cref="TrainingSession"/> apoya el rig en la Y de cada spawn (con origen de piso, el
+        /// origen del rig ES el piso). Un spawn más bajo que el <c>Ground</c> del patio deja al usuario
+        /// hundido; uno más alto, flotando. Sólo diagnostica: los spawns los arma el builder del patio.
+        /// </summary>
+        private static void CheckSpawnHeights(TrainingSession session, FireStation[] stations)
+        {
+            var ground = FindDeep(YardBuilder.GroundName);
+            if (ground == null)
+            {
+                Ok($"(aviso) No encontré '{YardBuilder.GroundName}': no puedo comparar la altura de los spawns.");
+                return;
+            }
+
+            const float tolerance = 0.05f; // m
+            float floorY = ground.position.y;
+            var spawns = new List<Transform>();
+            var lobby = new SerializedObject(session).FindProperty("lobbySpawn");
+            if (lobby != null && lobby.objectReferenceValue is Transform l) spawns.Add(l);
+            foreach (var s in stations) if (s != null) spawns.Add(s.PlayerSpawn);
+
+            int bad = 0;
+            foreach (var t in spawns)
+            {
+                float dy = t.position.y - floorY;
+                if (Mathf.Abs(dy) <= tolerance) continue;
+                bad++;
+                Problem($"'{Path(t)}' está {dy * 100f:+0;-0} cm respecto del piso del patio (y={floorY:0.00}): " +
+                        (dy < 0 ? "el usuario aparecería hundido." : "el usuario aparecería flotando."));
+            }
+            if (bad == 0) Ok($"{spawns.Count} spawn(s) a la altura del piso (y={floorY:0.00}).");
         }
 
         // ------------------------------------------------------------------ helpers

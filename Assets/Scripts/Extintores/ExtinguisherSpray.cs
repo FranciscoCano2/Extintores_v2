@@ -29,13 +29,15 @@ namespace Extintores
         // Valores de referencia del chorro. Son públicos porque el prefab NozzleRig los tiene
         // serializados (y esos ganan sobre estos defaults): el tool Extintores ▸ Tune Spray Density
         // los lee de acá para reescribir el prefab, así los números viven en UN solo lugar.
-        public const float DefaultMaxRate = 650f;
+        // 01/10/2026: 650 → 1000 p/s y partículas un poco más grandes y duraderas (nube más densa);
+        // el alpha baja 0,3 → 0,22 para que no quede opaca como leche ni dispare el overdraw.
+        public const float DefaultMaxRate = 1000f;
         public const float DefaultSpeed = 6f;
-        public const float DefaultLifetime = 0.65f;
+        public const float DefaultLifetime = 0.7f;
         public const float DefaultStartSize = 0.03f;
-        public const float DefaultEndSize = 0.28f;
+        public const float DefaultEndSize = 0.32f;
         public const float DefaultConeAngle = 14f;
-        public const float DefaultAlpha = 0.3f;
+        public const float DefaultAlpha = 0.22f;
 
         [Header("Chorro")]
         [Tooltip("Partículas por segundo con el grip a fondo. Es la densidad de la nube: subirlo " +

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Compila el APK para Meta Quest y, opcionalmente, lo instala en el visor por USB.
 
@@ -92,29 +92,9 @@ $sizeMb = [math]::Round((Get-Item $apk).Length / 1MB, 1)
 Write-Host "`nAPK listo: $apk ($sizeMb MB)"
 
 if (-not ($Install -or $Run)) {
-    Write-Host "Para instalarlo en el visor: .\tools\build-quest.ps1 -Run   (o adb install -r `"$apk`")"
+    Write-Host "Para instalarlo en el visor: .\tools\install-quest.ps1 -Run   (sirve también en otra PC, sin Unity)"
     exit 0
 }
 
-# --- adb: el del SDK de Unity si no hay uno en el PATH --------------------------------------
-$adb = (Get-Command adb -ErrorAction SilentlyContinue).Source
-if (-not $adb) {
-    $adb = "C:\Program Files\Unity\Hub\Editor\$unityVersion\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe"
-}
-if (-not (Test-Path $adb)) { throw "No encontré adb. Instalá Android SDK Platform Tools o el módulo Android de Unity." }
-
-$devices = & $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "\sdevice$" }
-if (-not $devices) {
-    throw "No hay ningún Quest conectado. Conectalo por USB y aceptá 'Allow USB debugging' DENTRO del visor."
-}
-
-Write-Host "Instalando en: $($devices -join ', ')"
-& $adb install -r $apk
-if ($LASTEXITCODE -ne 0) { throw "adb install falló." }
-
-if ($Run) {
-    & $adb shell monkey -p $appId -c android.intent.category.LAUNCHER 1 | Out-Null
-    Write-Host "Lanzado en el visor."
-}
-
-Write-Host "Listo. En el Quest queda en Apps ▸ (menú desplegable) ▸ Orígenes desconocidos ▸ Extintores_v2."
+# La instalación vive en install-quest.ps1, que también se usa solo para llevar el APK a otra PC.
+& (Join-Path $PSScriptRoot "install-quest.ps1") -Apk $apk -Run:$Run
