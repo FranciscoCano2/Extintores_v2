@@ -101,6 +101,15 @@ Comportamiento resultante (sin superposiciones):
   y `SerializedObject.FindProperty` devuelve `null` sin avisar. El default del prefab del SDK es
   **EyeLevel**, que deja los ojos al ras del piso; el juego lo quiere en **FloorLevel**. Lo corrige
   `Extintores ▸ Fix Scene Wiring` (helper `Editor/OvrTrackingOrigin.cs`).
+- **Aun con FloorLevel en la escena, el usuario podía aparecer HUNDIDO en el piso (a veces).** Con
+  OpenXR, `OVRManager` pide el origen de piso (`XRInputSubsystem.TrySetTrackingOriginMode(Floor)`)
+  **una sola vez** al iniciar; si el input subsystem todavía no arrancó loguea un error y sigue en
+  `Device` (eye level) → la cabeza nace en y≈0. Un recenter también puede mover el piso. Lo cubre
+  `FloorGuard` (lo maneja `TrainingSession`, sin cableado): re-pide el origen al arrancar, al
+  ponerse el visor, en recenter y en cambios de origen, y si los ojos quedan a < 0,5 m del piso
+  compensa la Y del rig (ojos a 1,6 m). Se evalúa sólo en esos momentos, NUNCA por frame: el
+  usuario se agacha frente al fuego y no hay que "levantarlo". `PlacePlayer` fija la Y del rig a la
+  del spawn. Diagnóstico en el visor: `adb logcat -s Unity | findstr FloorGuard`.
 - **No colgar carteles del `CenterEyeAnchor`**: quedan clavados a la cara, giran exacto con la cabeza
   y no se pueden leer. Usar `BodyLockedPanel` (seguimiento con zona muerta).
 - **`OVRControllerPrefab` trae `m_controller` con un valor viejo inválido** (`33554432`) que no
@@ -158,7 +167,8 @@ y la espuma sale de la boquilla izquierda.
   prefab con las constantes `ExtinguisherSpray.Default*`. Al subir la densidad hay que **bajar el
   alpha del tint**: cada partícula es un billboard traslúcido y lo que se paga en el Quest es el
   overdraw, no la cantidad. El techo de partículas vivas se deriva de `maxRate × lifetime`, así que
-  no hay que acordarse de subir `maxParticles`.
+  no hay que acordarse de subir `maxParticles`. Valores actuales (01/10/2026): 1000 p/s, vida
+  0,7 s, tamaño final 0,32 m, alpha 0,22.
 - **Subir la densidad NO debe apagar los fuegos más rápido.** `FireSource` cobra el daño *por
   partícula*, así que triplicar el caudal triplicaba la velocidad de apagado — un desbalanceo del
   ejercicio que ningún error delata. Por eso `FireSource` divide por `ExtinguisherSpray.ReferenceRate`
@@ -183,6 +193,11 @@ edita `SettingsMenu` (botón CONFIGURACIÓN del menú). Reglas:
   abrazadera): `ExtinguisherMount` suma encima la rotación del usuario (X/Y/Z, pivotando en el
   `GripPoint`) y un deslizamiento sobre el eje del prop (`userSlide`/`slideAxis`; tanque = +Y del
   `GripPoint`, boquilla = +Z).
+- **Los defaults de la calibración del usuario NO son cero**: son la calibración medida con el prop
+  real (`GameSettings.Default*`: altura −22 cm, rotación Y 65°, desplazamiento X/Z 2 cm). Si se
+  cambian, subir `GameSettings.SettingsVersion`: un visor con prefs guardadas no ve los defaults
+  nuevos si no se lo migra. Las prefs de las pruebas por Link (editor) viven en el registro:
+  `HKCU\Software\Unity\UnityEditor\DefaultCompany\Extintores_v2` (floats como QWORD de un double).
 - El panel de extintores tampoco se mueve tocando los `PanelAnchor`: `TrainingSession.ApplyPanelPose`
   suma `GameSettings.PanelOffset` en el espacio del anchor. El `SettingsPanel` es 100 % generado;
   si se le agrega un campo a `SettingsMenu`, sumarlo a `RequiredRefs` y `Fix Scene Wiring` lo rehace.

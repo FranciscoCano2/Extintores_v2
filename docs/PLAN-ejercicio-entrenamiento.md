@@ -318,15 +318,29 @@ Yard_Industrial            ← escenografía del pack: piso, muro, props por zon
       `Haptic`, común a todos los perfiles OpenXR del Quest, incluidos los *detached*).
 - [x] **Desplazamiento X/Z del tanque** (±15 cm, de a 1 cm), perpendicular a su eje; el eje largo
       sigue siendo la altura del mando.
-- [ ] Aplicar en la escena: `Fix Scene Wiring` rehace el `SettingsPanel` → Ctrl+S.
+- [x] Aplicar en la escena: `Fix Scene Wiring` rehace el `SettingsPanel` → Ctrl+S (verificado el
+      01/10 con `Validate Setup` en batchmode).
+- [x] **La calibración medida pasa a ser la de fábrica** (01/10): altura −22 cm, rotación Y 65°,
+      desplazamiento X/Z 2 cm. "Restablecer" vuelve ahí; `cfg.version` 2 migra los visores que ya
+      tenían prefs.
+- [x] **Chorro más denso** (01/10): 1000 p/s, vida 0,7 s, tamaño final 0,32 m, alpha 0,22. El
+      ritmo de apagado no cambia (`ReferenceRate`).
+- [x] **Hundido en el piso** (01/10): `FloorGuard` re-pide el origen de piso y compensa la altura si
+      los ojos quedan a < 0,5 m (ver `CLAUDE.md`). `Validate Setup` chequea los spawns contra el piso.
+- [x] **Build standalone** (01/10): `tools/install-quest.ps1` instala un APK ya compilado (otra PC,
+      sin Unity); `versionCode` = fecha y hora del build; versión 0.2.0.
+- [ ] Probar en el visor: arrancar varias veces + recenter sin quedar hundido; nube más densa sin
+      caída de FPS; extintor bien ubicado sin tocar Configuración.
 - [ ] Confirmar en el visor que vibra; si no, pasar las líneas `[Haptics]` del log.
 - [ ] Probar en el visor que la configuración **persiste**: cambiar algo, cerrar la app del todo,
       abrirla y ver que sigue igual (también tras reinstalar con `build-quest.ps1`). El log
       `[GameSettings] Cargado: …` muestra lo leído al arrancar.
 
-- [ ] **Aplicar la séptima y la octava ronda en la escena**: `Validate Setup` (tiene que marcar los
-      PanelAnchor, el collider del fondo del panel y la boquilla sin teñir) → `Fix Scene Wiring` →
-      Ctrl+S → `Validate Setup` en cero.
+- [x] **Aplicar la séptima y la octava ronda en la escena** (verificado el 01/10: `Validate Setup`
+      no marca nada de esto).
+- [ ] `Validate Setup` marca 3 despejes del patio: `Cargo_container_v1_LD1open` a < 1,8 m del fuego
+      de Zone_B, y `Cargo_container_v1_LD1close` a < 1,8 m del fuego de Zone_K y tapando su panel.
+      Correr esos contenedores en la tabla `Props` de `YardBuilder.cs`.
 - [ ] **Build & Run en el Quest** — imprescindible: por Link no llegan ni la colisión de partículas
       ni la pose de los mandos. Checklist en §6.
 - [ ] Ajustar en el visor: comodidad del HUD (`BodyLockedPanel`: `distance` 1,5 m, `heightOffset`
