@@ -14,7 +14,8 @@ namespace Extintores
     ///   <item><b>Tutorial</b>: los 4 puestos en orden, y en cada uno solo quedan habilitadas las
     ///         bahías cuyo agente es efectivo contra ese fuego.</item>
     ///   <item><b>Aleatorio</b>: un puesto al azar, con todas las bahías disponibles.</item>
-    ///   <item><b>Personalizado</b>: el puesto de la clase elegida.</item>
+    ///   <item><b>Personalizado</b>: el puesto que el usuario elige apuntando, desde el centro del
+    ///         patio, al elemento que quiere apagar (<see cref="FireStation.Selector"/>).</item>
     /// </list>
     ///
     /// Nunca teletransporta solo: al apagarse el fuego aparece el botón "Continuar" y el usuario
@@ -40,8 +41,6 @@ namespace Extintores
         [Header("Lobby")]
         [Tooltip("Dónde queda el usuario en el menú.")]
         [SerializeField] private Transform lobbySpawn;
-        [Tooltip("Dónde va el panel de extintores mientras se está en el menú.")]
-        [SerializeField] private Transform lobbyPanelAnchor;
 
         [Header("Botón de avance")]
         [Tooltip("Botón 'Continuar', oculto hasta que se apaga el fuego.")]
@@ -52,7 +51,7 @@ namespace Extintores
 
         [Header("Umbral del tutorial")]
         [Tooltip("Efectividad mínima para que una bahía quede habilitada en modo tutorial.")]
-        [SerializeField, Range(0f, 1f)] private float effectiveThreshold = 0.9f;
+        [SerializeField, Range(0f, 1f)] private float effectiveThreshold = ExtinguishMatrix.EffectiveThreshold;
 
         [Header("Eventos")]
         public UnityEvent onSessionStarted;
@@ -66,6 +65,16 @@ namespace Extintores
         public bool InSession { get; private set; }
         public FireStation CurrentStation =>
             _queue != null && _index >= 0 && _index < _queue.Count ? _queue[_index] : null;
+
+        /// <summary>Número de nivel en curso (1..<see cref="StageCount"/>), 0 fuera del ejercicio.</summary>
+        public int StageNumber => InSession ? Mathf.Clamp(_index + 1, 0, _queue.Count) : 0;
+        public int StageCount => _queue.Count;
+
+        /// <summary>
+        /// El fuego del puesto ya se apagó y se espera "Continuar". Junto con estar fuera de sesión,
+        /// es cuando <see cref="LaserPointer"/> muestra el rayo siempre (hay menú, no fuego).
+        /// </summary>
+        public bool AwaitingContinue { get; private set; }
 
         private readonly List<FireStation> _queue = new List<FireStation>();
         private int _index = -1;
@@ -83,6 +92,22 @@ namespace Extintores
                 if (cam != null) centerEye = cam.transform;
             }
             if (playerRig == null && centerEye != null) playerRig = centerEye.root;
+
+            foreach (var s in stations)
+            {
+                if (s == null || s.Selector == null) continue;
+                var station = s; // capturar por valor
+                s.Selector.Pressed += _ => StartCustom(station);
+            }
+        }
+
+        private void OnEnable() => GameSettings.Changed += OnSettingsChanged;
+        private void OnDisable() => GameSettings.Changed -= OnSettingsChanged;
+
+        /// <summary>El ajuste del panel se ve al instante, esté en un puesto o en la vista previa.</summary>
+        private void OnSettingsChanged()
+        {
+            if (panel != null && panel.gameObject.activeSelf) ApplyPanelPose();
         }
 
         private void Start()
@@ -115,11 +140,14 @@ namespace Extintores
             Begin(Mode.Random);
         }
 
-        public void StartCustom(FireClass fireClass)
+        public void StartCustom(FireClass fireClass) => StartCustom(FindStation(fireClass));
+
+        /// <summary>Personalizado sobre un puesto concreto: lo usa el cartel apuntable del elemento.</summary>
+        public void StartCustom(FireStation station)
         {
+            if (InSession) return; // un selector rezagado no debe cortar una sesión en curso
             _queue.Clear();
-            var s = FindStation(fireClass);
-            if (s != null) _queue.Add(s);
+            if (station != null && station.Fire != null) _queue.Add(station);
             Begin(Mode.Custom);
         }
 
@@ -136,6 +164,14 @@ namespace Extintores
 
             CurrentMode = mode;
             InSession = true;
+            SetStationSelectorsVisible(false);
+
+            // En Aleatorio la gracia es deducir el extintor: ni la letra sobre el fuego ni el
+            // verde/rojo del panel, que son la respuesta.
+            bool hide = mode == Mode.Random;
+            FireClassBadge.SuppressedByMode = hide;
+            BayHighlighter.HideAnswers = hide;
+
             _index = -1;
             onSessionStarted?.Invoke();
             Debug.Log($"[TrainingSession] Modo {mode}, {_queue.Count} puesto(s).");
@@ -150,6 +186,7 @@ namespace Extintores
 
             foreach (var s in stations) if (s != null) s.Deactivate();
             SetContinueVisible(false);
+            AwaitingContinue = false;
 
             _index++;
             if (_index >= _queue.Count) { Finish(); return; }
@@ -158,7 +195,8 @@ namespace Extintores
             station.Activate();
 
             PlacePlayer(station.PlayerSpawn);
-            MovePanel(station.PanelAnchor);
+            SetPanelVisible(true);
+            MovePanel(station.PanelAnchor, station.PlayerSpawn);
             ApplyBayGating(station);
 
             if (fireManager != null)
@@ -177,6 +215,7 @@ namespace Extintores
             onStageCleared?.Invoke();
 
             // No avanza solo: el usuario decide cuándo con el botón "Continuar".
+            AwaitingContinue = true;
             SetContinueVisible(true);
             Debug.Log("[TrainingSession] Fuego apagado. Esperando 'Continuar'.");
         }
@@ -202,12 +241,27 @@ namespace Extintores
             Unwatch();
             foreach (var s in stations) if (s != null) s.Deactivate();
             SetContinueVisible(false);
+            AwaitingContinue = false;
             SetAllBaysInteractable(true);
+            SetStationSelectorsVisible(false);
+            FireClassBadge.SuppressedByMode = false;
+            BayHighlighter.HideAnswers = false;
 
             if (lobbySpawn != null) PlacePlayer(lobbySpawn);
-            MovePanel(lobbyPanelAnchor);
+            // En el lobby no hay fuego: el panel de extintores sólo estorbaría el menú.
+            SetPanelVisible(false);
 
             StageChanged?.Invoke(null);
+        }
+
+        /// <summary>
+        /// Muestra los carteles apuntables sobre los elementos. Lo prende <see cref="MainMenu"/> al
+        /// abrir Personalizado; sólo tiene sentido en el lobby.
+        /// </summary>
+        public void SetStationSelectorsVisible(bool visible)
+        {
+            if (visible && InSession) return;
+            foreach (var s in stations) if (s != null) s.SetSelectable(visible);
         }
 
         // ---------------------------------------------------------------- piezas
@@ -239,10 +293,72 @@ namespace Extintores
             }
         }
 
-        private void MovePanel(Transform anchor)
+        private void SetPanelVisible(bool visible)
         {
-            if (panel == null || anchor == null) return;
-            panel.transform.SetPositionAndRotation(anchor.position, anchor.rotation);
+            if (panel != null && panel.gameObject.activeSelf != visible)
+                panel.gameObject.SetActive(visible);
+        }
+
+        /// <summary>
+        /// Muestra el panel de extintores en el lobby, en el mismo lugar relativo que tendrá en los
+        /// puestos, para que el usuario lo acomode desde Configuración viéndolo. Fuera del lobby no
+        /// hace nada: en un puesto el panel lo maneja la etapa.
+        /// </summary>
+        public void PreviewPanel(bool on)
+        {
+            if (InSession) return;
+            if (!on) { SetPanelVisible(false); return; }
+
+            var anchor = LobbyPanelAnchor();
+            if (anchor == null)
+            {
+                Debug.LogWarning("[TrainingSession] No encontré 'Lobby/PanelAnchor': no puedo mostrar " +
+                                 "la vista previa del panel.");
+                return;
+            }
+            SetPanelVisible(true);
+            MovePanel(anchor, lobbySpawn);
+        }
+
+        /// <summary>El PanelAnchor del lobby (hermano de <see cref="lobbySpawn"/> en el galpón).</summary>
+        private Transform LobbyPanelAnchor()
+        {
+            if (lobbySpawn == null || lobbySpawn.parent == null) return null;
+            return lobbySpawn.parent.Find("PanelAnchor");
+        }
+
+        private Transform _panelAnchor;
+        private Transform _panelSpawn;
+
+        private void MovePanel(Transform anchor, Transform spawn)
+        {
+            _panelAnchor = anchor;
+            _panelSpawn = spawn;
+            ApplyPanelPose();
+        }
+
+        /// <summary>
+        /// Pose del panel = su anchor + el ajuste del usuario (<see cref="GameSettings.PanelOffset"/>,
+        /// en el espacio del anchor). Si el ajuste lo corre de costado o en profundidad, se re-gira
+        /// en yaw para que siga mirando al spawn: la cara legible (−Z) tiene que quedar de frente al
+        /// usuario (ver PLAN §3); corrido medio metro sin girar, se leería de canto.
+        /// </summary>
+        private void ApplyPanelPose()
+        {
+            if (panel == null || _panelAnchor == null) return;
+
+            Vector3 pos = _panelAnchor.position + _panelAnchor.rotation * GameSettings.PanelOffset;
+            Quaternion rot = _panelAnchor.rotation;
+
+            if (_panelSpawn != null)
+            {
+                Vector3 from = _panelAnchor.position - _panelSpawn.position; from.y = 0f;
+                Vector3 to = pos - _panelSpawn.position; to.y = 0f;
+                if (from.sqrMagnitude > 1e-4f && to.sqrMagnitude > 1e-4f)
+                    rot = Quaternion.FromToRotation(from, to) * rot;
+            }
+
+            panel.transform.SetPositionAndRotation(pos, rot);
         }
 
         /// <summary>

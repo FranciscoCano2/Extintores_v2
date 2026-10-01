@@ -44,6 +44,25 @@ namespace Extintores
         [Tooltip("Rotación del extintor relativa al anchor (euler, grados).")]
         [SerializeField] private Vector3 rotationOffset = Vector3.zero;
 
+        [Header("Ajuste del usuario (menú Configuración)")]
+        [Tooltip("Qué ajuste de GameSettings aplica a este objeto. Tanque: altura de la abrazadera " +
+                 "sobre su eje + rotación en los 3 ejes alrededor de la abrazadera. Boquilla: " +
+                 "deslizamiento sobre su eje.")]
+        [SerializeField] private UserSlide userSlide = UserSlide.ByHand;
+
+        [Tooltip("Eje sobre el que se desliza, en el espacio del punto de agarre (o de la raíz si no " +
+                 "hay). Tanque: +Y, su eje largo. Boquilla: +Z, hacia donde sale el chorro.")]
+        [SerializeField] private Vector3 slideAxis = Vector3.zero;
+
+        public enum UserSlide
+        {
+            /// <summary>Mano derecha = tanque, izquierda = boquilla (el esquema a dos manos).</summary>
+            ByHand,
+            None,
+            TankHeight,
+            NozzleOffset,
+        }
+
         [Header("Referencias")]
         [Tooltip("Punto de agarre: dónde queda atado el mando sobre el extintor real. " +
                  "Es ESTE punto el que se alinea con el anchor, no el pivote del modelo " +
@@ -84,6 +103,13 @@ namespace Extintores
             Vector3 targetPos = anchorPos + anchorRot * positionOffset;
             Quaternion targetRot = anchorRot * Quaternion.Euler(rotationOffset);
 
+            // Ajuste del usuario, encima de la calibración de fábrica. Primero la rotación: como
+            // targetRot/targetPos son la pose del AGARRE, girar acá hace pivotar el tanque alrededor
+            // de la abrazadera, que es por donde está unido al mando. Después el deslizamiento, en el
+            // espacio ya girado, así sigue siendo "a lo largo del tanque".
+            targetRot *= UserRotation();
+            targetPos += targetRot * (SlideAxis() * SlideDistance() + UserShift());
+
             if (gripPoint == null)
             {
                 // Sin punto de agarre: se alinea la raíz (queda expuesto el pivote del FBX).
@@ -100,6 +126,40 @@ namespace Extintores
             Vector3 rootPos = targetPos - rootRot * gripLocalPos;
 
             transform.SetPositionAndRotation(rootPos, rootRot);
+        }
+
+        private UserSlide ResolvedSlide() =>
+            userSlide != UserSlide.ByHand ? userSlide
+            : hand == MountHand.Right ? UserSlide.TankHeight : UserSlide.NozzleOffset;
+
+        /// <summary>Rotación elegida en Configuración. Sólo el tanque: la boquilla se desliza nada más.</summary>
+        private Quaternion UserRotation() =>
+            ResolvedSlide() == UserSlide.TankHeight ? Quaternion.Euler(GameSettings.TankRotation)
+                                                    : Quaternion.identity;
+
+        /// <summary>Desplazamiento transversal (X/Z del tanque) elegido en Configuración. Sólo el tanque.</summary>
+        private Vector3 UserShift() =>
+            ResolvedSlide() == UserSlide.TankHeight ? GameSettings.TankShift : Vector3.zero;
+
+        private Vector3 SlideAxis()
+        {
+            if (slideAxis.sqrMagnitude > 1e-6f) return slideAxis.normalized;
+            return ResolvedSlide() == UserSlide.NozzleOffset ? Vector3.forward : Vector3.up;
+        }
+
+        /// <summary>
+        /// Cuánto se corre el prop sobre <see cref="SlideAxis"/>. Para el tanque el valor del menú es
+        /// la altura del MANDO: si la abrazadera sube, el tanque queda más abajo respecto del mando,
+        /// de ahí el signo.
+        /// </summary>
+        private float SlideDistance()
+        {
+            switch (ResolvedSlide())
+            {
+                case UserSlide.TankHeight: return -GameSettings.TankControllerHeight;
+                case UserSlide.NozzleOffset: return GameSettings.NozzleOffset;
+                default: return 0f;
+            }
         }
 
         /// <summary>

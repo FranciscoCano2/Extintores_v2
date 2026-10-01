@@ -141,9 +141,9 @@ namespace Extintores
 
         private static IEnumerator Buzz()
         {
-            OVRInput.SetControllerVibration(0.6f, 0.8f, OVRInput.Controller.RTouch);
+            Haptics.Set(0.6f, 0.8f, OVRInput.Controller.RTouch);
             yield return new WaitForSeconds(0.2f);
-            OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.RTouch);
+            Haptics.Stop(OVRInput.Controller.RTouch);
         }
     }
 }
