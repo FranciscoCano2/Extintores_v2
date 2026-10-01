@@ -105,9 +105,11 @@ namespace Extintores
             for (int i = 0; i < segments; i++)
                 for (int j = 0; j < sides; j++)
                 {
+                    // Orden horario visto desde afuera (convención de Unity): con (a, b, a+1) el
+                    // tubo quedaba del revés y se veían las caras de adentro, mal iluminadas.
                     int a = i * ring + j, b = a + ring;
-                    tris[t++] = a; tris[t++] = b; tris[t++] = a + 1;
-                    tris[t++] = a + 1; tris[t++] = b; tris[t++] = b + 1;
+                    tris[t++] = a; tris[t++] = a + 1; tris[t++] = b;
+                    tris[t++] = a + 1; tris[t++] = b + 1; tris[t++] = b;
                 }
 
             _mesh = new Mesh { name = "HoseTube" };
