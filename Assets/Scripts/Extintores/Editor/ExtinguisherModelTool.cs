@@ -339,7 +339,7 @@ namespace Extintores.EditorTools
             //    a escala 1 quedaría deformado y flotando; el modelo nuevo trae su banda 'Label'.
             var scene = EditorSceneManager.OpenScene(TrainingScene, OpenSceneMode.Single);
             int removed = 0;
-            foreach (var sw in Object.FindObjectsByType<ExtinguisherSwappable>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var sw in Object.FindObjectsByType<ExtinguisherSwappable>(FindObjectsInactive.Include))
                 foreach (var t in sw.GetComponentsInChildren<Transform>(true))
                     if (t != null && t.name.StartsWith("Label") && PrefabUtility.IsAddedGameObjectOverride(t.gameObject))
                     {
@@ -390,6 +390,11 @@ namespace Extintores.EditorTools
                 // Poses (espacio raíz) de los hijos de Visual que no son el modelo: se restauran después
                 // de devolver Visual a escala 1, así el GripPoint no se mueve ni un milímetro.
                 var oldModel = FindModel(visual, OldModel);
+                if (oldModel == null)
+                {
+                    Debug.LogError("[ExtinguisherModelTool] No encontré el modelo viejo bajo 'Visual': no se toca el prefab.");
+                    return false;
+                }
                 var keep = new List<(Transform t, Vector3 p, Quaternion r)>();
                 foreach (Transform c in visual)
                     if (c != oldModel) keep.Add((c, c.position, c.rotation));
@@ -399,7 +404,7 @@ namespace Extintores.EditorTools
                 visual.localScale = Vector3.one;
                 foreach (var (t, p, r) in keep) t.SetPositionAndRotation(p, r);
 
-                if (oldModel != null) Object.DestroyImmediate(oldModel.gameObject);
+                Object.DestroyImmediate(oldModel.gameObject);
 
                 Placement(modelAsset, out Vector3 pos, out Quaternion rot);
                 var model = (GameObject)PrefabUtility.InstantiatePrefab(modelAsset, visual);
@@ -439,7 +444,7 @@ namespace Extintores.EditorTools
                 var tip = spray.transform;
                 var parent = tip.parent != null ? tip.parent : rt;
 
-                if (FindModel(rt, NozzlePath) == null)
+                if (FindModel(parent, NozzlePath) == null)
                 {
                     foreach (var n in new[] { "Hose", "Horn" })
                     {
@@ -498,15 +503,17 @@ namespace Extintores.EditorTools
             }
         }
 
-        /// <summary>Raíz de la instancia del modelo <paramref name="assetPath"/> colgada de <paramref name="parent"/>.</summary>
+        /// <summary>
+        /// Hijo directo de <paramref name="parent"/> que contiene las mallas del modelo
+        /// <paramref name="assetPath"/>. Se busca por las MALLAS y no por la fuente del prefab anidado:
+        /// dentro de <c>LoadPrefabContents</c>, <c>GetCorrespondingObjectFromSource</c> no devolvió el
+        /// FBX y el swap dejaba el modelo viejo puesto (a escala 1:1, de 2 m) sin ningún error.
+        /// </summary>
         private static Transform FindModel(Transform parent, string assetPath)
         {
-            foreach (var t in parent.GetComponentsInChildren<Transform>(true))
-            {
-                if (!PrefabUtility.IsAnyPrefabInstanceRoot(t.gameObject)) continue;
-                var src = PrefabUtility.GetCorrespondingObjectFromSource(t.gameObject);
-                if (src != null && AssetDatabase.GetAssetPath(src) == assetPath) return t;
-            }
+            foreach (Transform c in parent)
+                foreach (var mf in c.GetComponentsInChildren<MeshFilter>(true))
+                    if (mf.sharedMesh != null && AssetDatabase.GetAssetPath(mf.sharedMesh) == assetPath) return c;
             return null;
         }
 

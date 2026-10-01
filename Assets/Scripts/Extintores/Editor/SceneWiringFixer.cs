@@ -413,7 +413,7 @@ namespace Extintores.EditorTools
             var mount = spray.GetComponentInParent<ExtinguisherMount>();
             var nozzleRoot = mount != null ? mount.transform : spray.transform;
 
-            var hoses = Object.FindObjectsByType<ExtinguisherHose>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var hoses = Object.FindObjectsByType<ExtinguisherHose>(FindObjectsInactive.Include);
             if (hoses.Length > 1)
             {
                 Problem($"Hay {hoses.Length} ExtinguisherHose en la escena: debe haber una sola (se dibujarían superpuestas).");
