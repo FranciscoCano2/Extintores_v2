@@ -220,17 +220,32 @@ namespace Extintores
             LastHitTime = Time.time;
 
             // Efectividad del agente contra ESTA clase de fuego:
-            //   >0 apaga (más rápido cuanto mayor), ~0 casi nada, <0 lo aviva (extintor equivocado).
+            //   ≥ umbral apaga, entre 0 y el umbral NO hace nada, <0 lo aviva.
+            // Los intermedios antes apagaban "más lento" y en la práctica cualquier extintor servía.
             float mult = ExtinguishMatrix.Effectiveness(spray.Agent, fireClass);
-            ApplyExtinguish(weighted * healthPerParticle * mult);
+            bool effective = mult >= ExtinguishMatrix.EffectiveThreshold;
+            if (effective || mult < 0f)
+                ApplyExtinguish(weighted * healthPerParticle * mult * RateNormalization(spray));
 
-            if (mult < 0f && Time.time >= _nextWrongWarnTime)
+            if (!effective && Time.time >= _nextWrongWarnTime)
             {
                 _nextWrongWarnTime = Time.time + 0.5f;
                 WrongAgentUsed?.Invoke(this, spray.Agent);
                 Debug.Log($"[FireSource] Agente equivocado ({spray.Agent}) sobre fuego clase " +
-                          $"{fireClass}: no se apaga, se aviva.");
+                          $"{fireClass}: no se apaga{(mult < 0f ? ", se aviva" : "")}.");
             }
+        }
+
+        /// <summary>
+        /// Compensa la densidad de la nube: el daño se cobra POR PARTÍCULA, así que duplicar el
+        /// caudal del chorro duplicaría la velocidad de apagado y desbalancearía el ejercicio sin
+        /// que nada lo delate. Dividiendo por el caudal de referencia, <see cref="healthPerParticle"/>
+        /// sigue significando lo mismo y la densidad queda como lo que es: una decisión visual.
+        /// </summary>
+        private static float RateNormalization(ExtinguisherSpray spray)
+        {
+            float rate = spray.MaxRate;
+            return rate > 1f ? ExtinguisherSpray.ReferenceRate / rate : 1f;
         }
 
         /// <summary>

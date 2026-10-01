@@ -26,20 +26,36 @@ namespace Extintores
                  "el rig y cambiá este agente.")]
         [SerializeField] private AgentType agent = AgentType.DryChemABC;
 
+        // Valores de referencia del chorro. Son públicos porque el prefab NozzleRig los tiene
+        // serializados (y esos ganan sobre estos defaults): el tool Extintores ▸ Tune Spray Density
+        // los lee de acá para reescribir el prefab, así los números viven en UN solo lugar.
+        public const float DefaultMaxRate = 650f;
+        public const float DefaultSpeed = 6f;
+        public const float DefaultLifetime = 0.65f;
+        public const float DefaultStartSize = 0.03f;
+        public const float DefaultEndSize = 0.28f;
+        public const float DefaultConeAngle = 14f;
+        public const float DefaultAlpha = 0.3f;
+
         [Header("Chorro")]
-        [Tooltip("Partículas por segundo con el grip a fondo.")]
-        [SerializeField] private float maxRate = 220f;
+        [Tooltip("Partículas por segundo con el grip a fondo. Es la densidad de la nube: subirlo " +
+                 "la hace más compacta, pero cada partícula es un billboard traslúcido y el " +
+                 "fillrate del Quest se paga en overdraw — al subirlo, bajar el alpha del tint.")]
+        [SerializeField] private float maxRate = DefaultMaxRate;
         [Tooltip("Velocidad de salida (m/s).")]
-        [SerializeField] private float speed = 6f;
+        [SerializeField] private float speed = DefaultSpeed;
         [Tooltip("Duración de cada partícula (s).")]
-        [SerializeField] private float lifetime = 0.6f;
+        [SerializeField] private float lifetime = DefaultLifetime;
         [Tooltip("Tamaño inicial y final de cada partícula (m). Crece como espuma/gas.")]
-        [SerializeField] private float startSize = 0.04f;
-        [SerializeField] private float endSize = 0.35f;
+        [SerializeField] private float startSize = DefaultStartSize;
+        [SerializeField] private float endSize = DefaultEndSize;
         [Tooltip("Apertura del cono del chorro (grados).")]
-        [SerializeField, Range(0f, 45f)] private float coneAngle = 14f;
+        [SerializeField, Range(0f, 45f)] private float coneAngle = DefaultConeAngle;
         [Tooltip("Color/opacidad base del chorro.")]
-        [SerializeField] private Color tint = new Color(1f, 1f, 1f, 0.5f);
+        [SerializeField] private Color tint = new Color(1f, 1f, 1f, DefaultAlpha);
+        [Tooltip("Variación aleatoria (0..1) de velocidad y vida por partícula. Con la nube densa, " +
+                 "sin esto todas las partículas viajan iguales y se ven capas/bandas en vez de espuma.")]
+        [SerializeField, Range(0f, 0.5f)] private float spread = 0.15f;
 
         [Header("Colisión con fuegos")]
         [Tooltip("Layers contra las que colisiona el chorro para apagar fuegos. Si queda en " +
@@ -49,6 +65,10 @@ namespace Extintores
 
         [Header("Háptica")]
         [SerializeField] private bool haptics = true;
+        [Tooltip("Mando de la boquilla (el que sostiene la manguera). También vibra mientras sale el " +
+                 "chorro, un poco más suave: es por donde se siente la descarga en un extintor real.")]
+        [SerializeField] private OVRInput.Controller nozzleController = OVRInput.Controller.LTouch;
+        [SerializeField, Range(0f, 1f)] private float nozzleHapticScale = 0.7f;
 
         /// <summary>True mientras se está rociando. Lo consume la lógica de apagado de fuegos.</summary>
         public bool IsSpraying { get; private set; }
@@ -60,6 +80,15 @@ namespace Extintores
         /// <summary>Agente de este extintor. Lo lee <see cref="FireSource"/> para modular el
         /// apagado según la clase de fuego (matriz de efectividad).</summary>
         public AgentType Agent => agent;
+
+        /// <summary>Caudal a fondo (partículas/s). Lo lee <see cref="FireSource"/> para que el
+        /// ritmo de apagado no dependa de cuán densa se vea la nube.</summary>
+        public float MaxRate => maxRate;
+
+        /// <summary>Caudal con el que se calibró <c>FireSource.healthPerParticle</c>. El apagado se
+        /// cobra POR PARTÍCULA, así que subir <see cref="MaxRate"/> apagaría los fuegos más rápido:
+        /// <see cref="FireSource"/> divide por este caudal para compensarlo.</summary>
+        public const float ReferenceRate = 220f;
 
         /// <summary>Cambia el agente en runtime (lo usa la pared de recarga al hacer el swap).</summary>
         public void SetAgent(AgentType newAgent) => agent = newAgent;
@@ -81,23 +110,35 @@ namespace Extintores
             {
                 IsSpraying = spraying;
                 _emission.enabled = spraying;
+
+                // Parar SÓLO al soltar, no en cada frame sin disparar: eso cortaba al instante los
+                // pulsos de los botones, las bahías y el aviso de error, y el mando nunca vibraba.
+                if (!spraying && haptics) StopHaptics();
             }
 
             if (spraying)
             {
                 _emission.rateOverTime = Mathf.Lerp(maxRate * 0.35f, maxRate, g);
                 if (haptics)
-                    OVRInput.SetControllerVibration(0.35f, Mathf.Lerp(0.2f, 0.6f, g), triggerController);
-            }
-            else if (haptics)
-            {
-                OVRInput.SetControllerVibration(0f, 0f, triggerController);
+                {
+                    float amp = Mathf.Lerp(0.2f, 0.6f, g);
+                    Haptics.Set(0.35f, amp, triggerController);
+                    if (nozzleController != OVRInput.Controller.None && nozzleController != triggerController)
+                        Haptics.Set(0.35f, amp * nozzleHapticScale, nozzleController);
+                }
             }
         }
 
         private void OnDisable()
         {
-            if (haptics) OVRInput.SetControllerVibration(0f, 0f, triggerController);
+            if (haptics && IsSpraying) StopHaptics();
+        }
+
+        private void StopHaptics()
+        {
+            Haptics.Stop(triggerController);
+            if (nozzleController != OVRInput.Controller.None && nozzleController != triggerController)
+                Haptics.Stop(nozzleController);
         }
 
         private void BuildParticleSystem()
@@ -107,12 +148,15 @@ namespace Extintores
 
             var main = _ps.main;
             main.simulationSpace = ParticleSystemSimulationSpace.World; // el chorro queda en el aire
-            main.startSpeed = speed;
-            main.startLifetime = lifetime;
+            main.startSpeed = Ranged(speed, spread);
+            main.startLifetime = Ranged(lifetime, spread);
             main.startColor = tint;
             main.startSize = endSize;                 // el tamaño final; la curva lo escala hacia abajo al nacer
             main.gravityModifier = 0.15f;
-            main.maxParticles = 2000;
+            // Techo de partículas vivas derivado del caudal: rate × vida (×1.5 de margen por la
+            // variación de 'spread'). Si estuviera fijo, subir maxRate recortaría el chorro en seco
+            // al llegar al tope y no habría ningún error que lo delate.
+            main.maxParticles = Mathf.Max(512, Mathf.CeilToInt(maxRate * lifetime * 1.5f));
             main.playOnAwake = false;
 
             _emission = _ps.emission;
@@ -176,6 +220,13 @@ namespace Extintores
             pr.renderMode = ParticleSystemRenderMode.Billboard;
 
             _ps.Play(); // corre siempre; sin emisión no hay partículas
+        }
+
+        /// <summary>Curva de rango aleatorio <c>[v·(1-s), v·(1+s)]</c> para dar variación por partícula.</summary>
+        private static ParticleSystem.MinMaxCurve Ranged(float value, float s)
+        {
+            if (s <= 0f) return new ParticleSystem.MinMaxCurve(value);
+            return new ParticleSystem.MinMaxCurve(value * (1f - s), value * (1f + s));
         }
 
         /// <summary>Textura de punto radial suave (blanco con alpha que cae hacia el borde).</summary>

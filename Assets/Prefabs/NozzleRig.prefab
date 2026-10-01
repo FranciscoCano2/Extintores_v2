@@ -43,7 +43,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 601a63a47d5e58e40a9b9b7abe2b4c11, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Extintores.ExtinguisherMount
   anchor: {fileID: 0}
   hand: 1
@@ -310,15 +310,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5c1d3e2f9a7b48c6b0e4d1a6f3c9b2e7, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Extintores.ExtinguisherSpray
   triggerController: 2
   threshold: 0.15
-  maxRate: 220
+  agent: 3
+  maxRate: 650
   speed: 6
-  lifetime: 0.6
-  startSize: 0.04
-  endSize: 0.35
+  lifetime: 0.65
+  startSize: 0.03
+  endSize: 0.28
   coneAngle: 14
-  tint: {r: 1, g: 1, b: 1, a: 0.5}
+  tint: {r: 1, g: 1, b: 1, a: 0.3}
+  spread: 0.15
+  collidesWith:
+    serializedVersion: 2
+    m_Bits: 0
   haptics: 1
