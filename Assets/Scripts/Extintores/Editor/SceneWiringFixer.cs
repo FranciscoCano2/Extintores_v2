@@ -100,6 +100,7 @@ namespace Extintores.EditorTools
             FixSwapSensor(apply, swappable);
             FixHose(apply, swappable, spray); // antes del tinte: la manguera es una pieza más de la boquilla
             FixSwappableWiring(apply, swappable, spray);
+            CheckExtinguisherModel(swappable, spray);
             FixLaser(apply, spray);
             FixStationPrefab(apply, station);
             FixBoardTranslucency(apply);
@@ -496,6 +497,41 @@ namespace Extintores.EditorTools
                     Fixed("Sombras de la manguera apagadas.");
                 }
             }
+        }
+
+        // ------------------------------------------------------------------ modelo del extintor
+        /// <summary>
+        /// El tanque tiene que ser el modelo propio a escala real (34,8 × 7,65 cm), no el del pack
+        /// estirado a 48 × 15 cm por <see cref="ExtinguisherSizer"/>. Sólo diagnostica: el cambio lo
+        /// hace <c>Extintores ▸ Swap Extinguisher Model</c>, que además conserva la calibración.
+        /// </summary>
+        private static void CheckExtinguisherModel(ExtinguisherSwappable sw, ExtinguisherSpray spray)
+        {
+            if (sw == null) return;
+
+            var body = FindBodyRenderer(sw);
+            var mf = body != null ? body.GetComponent<MeshFilter>() : null;
+            string bodyPath = mf != null && mf.sharedMesh != null ? AssetDatabase.GetAssetPath(mf.sharedMesh) : "";
+            if (bodyPath == ExtinguisherModelTool.ModelPath) Ok("El tanque es el modelo de 1 kg a escala real.");
+            else Problem($"El tanque usa '{bodyPath}' en vez de '{ExtinguisherModelTool.ModelPath}': " +
+                         "corré 'Extintores ▸ Swap Extinguisher Model (1 kg real)'.");
+
+            foreach (var sizer in sw.GetComponentsInChildren<ExtinguisherSizer>(true))
+                if (sizer.enabled)
+                    Problem($"'{Path(sizer.transform)}' tiene un ExtinguisherSizer activo: reescalaría el modelo " +
+                            "de 1 kg (que ya viene a escala real) y movería el GripPoint.");
+
+            int tris = ExtinguisherModelTool.TriangleCount(sw.transform);
+            if (tris > 5000) Problem($"El tanque tiene {tris} triángulos: demasiado para algo que está siempre en mano en el Quest.");
+            else Ok($"Tanque: {tris} triángulos.");
+
+            if (spray == null) return;
+            var mount = spray.GetComponentInParent<ExtinguisherMount>();
+            bool nozzle = false;
+            foreach (var f in (mount != null ? mount.transform : spray.transform).GetComponentsInChildren<MeshFilter>(true))
+                if (f.sharedMesh != null && AssetDatabase.GetAssetPath(f.sharedMesh) == ExtinguisherModelTool.NozzlePath) nozzle = true;
+            if (nozzle) Ok("La boquilla es la modelada (Boquilla.fbx).");
+            else Problem("La boquilla sigue siendo de cilindros primitivos: corré 'Extintores ▸ Swap Extinguisher Model (1 kg real)'.");
         }
 
         // ------------------------------------------------------------------ Swappable

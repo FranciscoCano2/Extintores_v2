@@ -27,8 +27,15 @@ namespace Extintores.EditorTools
         private const string OutFolder = "Assets/Extintores/Extinguisher";
         private const string GrayTexture = OutFolder + "/FireExtinguisher_Diffuse_Gray.png";
 
-        /// <summary>Material del cuerpo del tanque. Lo busca <c>SceneWiringFixer</c>.</summary>
-        public const string BodyMaterial = OutFolder + "/M_Extinguisher_Body.mat";
+        /// <summary>
+        /// Material tintable del extintor (tanque, boquilla y manguera). Lo busca <c>SceneWiringFixer</c>.
+        /// Desde el modelo propio de 1 kg es el liso de <see cref="ExtinguisherModelTool"/>: el gris de
+        /// este tool está mapeado a las UV del modelo del pack y sobre el nuevo saldría ruido.
+        /// </summary>
+        public const string BodyMaterial = ExtinguisherModelTool.PaintMaterial;
+
+        /// <summary>Material del tanque del pack (textura desaturada). Sólo lo usa el modelo viejo.</summary>
+        private const string PackBodyMaterial = OutFolder + "/M_Extinguisher_Body.mat";
 
         [MenuItem("Extintores/Build Extinguisher Body Material", priority = 34)]
         public static void Build()
@@ -50,7 +57,7 @@ namespace Extintores.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log($"[ExtinguisherBodyTool] '{BodyMaterial}' listo (mapa desaturado en " +
+            Debug.Log($"[ExtinguisherBodyTool] '{PackBodyMaterial}' listo (mapa desaturado en " +
                       $"'{GrayTexture}'). Ahora corré 'Extintores ▸ Fix Scene Wiring' para " +
                       "asignárselo al tanque y cablear el tinte por tipo de extintor.\n" +
                       $"Material: {mat.name}");
@@ -116,11 +123,11 @@ namespace Extintores.EditorTools
 
         private static Material GetOrCreateMaterial(Texture2D gray)
         {
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterial);
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(PackBodyMaterial);
             if (mat == null)
             {
                 mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                AssetDatabase.CreateAsset(mat, BodyMaterial);
+                AssetDatabase.CreateAsset(mat, PackBodyMaterial);
             }
 
             mat.SetTexture("_BaseMap", gray);
