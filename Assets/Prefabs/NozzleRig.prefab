@@ -51,6 +51,8 @@ MonoBehaviour:
   trackingSpace: {fileID: 0}
   positionOffset: {x: 0, y: 0, z: 0}
   rotationOffset: {x: 0, y: 0, z: 0}
+  userSlide: 0
+  slideAxis: {x: 0, y: 0, z: 0}
   gripPoint: {fileID: 0}
   nozzleTip: {fileID: 8100000000000000041}
   drawGizmos: 1
@@ -315,15 +317,17 @@ MonoBehaviour:
   triggerController: 2
   threshold: 0.15
   agent: 3
-  maxRate: 650
+  maxRate: 1000
   speed: 6
-  lifetime: 0.65
+  lifetime: 0.7
   startSize: 0.03
-  endSize: 0.28
+  endSize: 0.32
   coneAngle: 14
-  tint: {r: 1, g: 1, b: 1, a: 0.3}
+  tint: {r: 1, g: 1, b: 1, a: 0.22}
   spread: 0.15
   collidesWith:
     serializedVersion: 2
     m_Bits: 0
   haptics: 1
+  nozzleController: 1
+  nozzleHapticScale: 0.7
