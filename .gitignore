@@ -98,3 +98,6 @@ sysinfo.txt
 # Escenas de recuperación que genera Unity tras un crash
 /[Aa]ssets/_Recovery/
 /[Aa]ssets/_Recovery.meta
+
+# Temporales de build de Unity/Android (Gradle, IL2CPP)
+/.utmp/
