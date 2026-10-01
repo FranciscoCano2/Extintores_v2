@@ -32,6 +32,19 @@ namespace Extintores
         public const float PanelHeightMax = 0.5f;                   // m, arriba y abajo
         public const float PanelDistanceMax = 0.8f;                 // m, más cerca y más lejos
 
+        // Calibración de fábrica del extintor: la que se midió con el prop real montado (prueba del
+        // 01/10/2026). "Restablecer" vuelve acá, y un visor sin preferencias guardadas arranca así.
+        public const float DefaultTankHeight = -0.22f;                                   // m
+        public static readonly Vector3 DefaultTankShift = new Vector3(0.02f, 0f, 0.02f); // m
+        public static readonly Vector3 DefaultTankRotation = new Vector3(0f, 65f, 0f);   // grados
+        public const float DefaultNozzleOffset = 0f;                                     // m
+
+        // Versión de los defaults. Al subirla, la calibración del extintor guardada con una versión
+        // anterior se descarta UNA vez: si no, un visor que ya tenía prefs (los viejos ceros) nunca
+        // vería los defaults nuevos.
+        private const int SettingsVersion = 2;
+        private const string KeyVersion = "cfg.version";
+
         private const string KeyVolume = "cfg.volume";
         private const string KeyVibration = "cfg.vibration";
         private const string KeyTankHeight = "cfg.tankControllerHeight";
@@ -184,10 +197,7 @@ namespace Extintores
             EnsureLoaded();
             _volume = 1f;
             _vibration = true;
-            _tankHeight = 0f;
-            _tankShift = Vector3.zero;
-            _tankRotation = Vector3.zero;
-            _nozzleOffset = 0f;
+            SetExtinguisherDefaults();
             _panel = Vector3.zero;
             Save();
         }
@@ -196,11 +206,16 @@ namespace Extintores
         public static void ResetExtinguisher()
         {
             EnsureLoaded();
-            _tankHeight = 0f;
-            _tankShift = Vector3.zero;
-            _tankRotation = Vector3.zero;
-            _nozzleOffset = 0f;
+            SetExtinguisherDefaults();
             Save();
+        }
+
+        private static void SetExtinguisherDefaults()
+        {
+            _tankHeight = DefaultTankHeight;
+            _tankShift = DefaultTankShift;
+            _tankRotation = DefaultTankRotation;
+            _nozzleOffset = DefaultNozzleOffset;
         }
 
         /// <summary>Vuelve sólo el panel a su posición de fábrica.</summary>
@@ -248,19 +263,29 @@ namespace Extintores
             _loaded = true;
             _volume = Mathf.Clamp01(PlayerPrefs.GetFloat(KeyVolume, 1f));
             _vibration = PlayerPrefs.GetInt(KeyVibration, 1) != 0;
-            _tankHeight = Mathf.Clamp(PlayerPrefs.GetFloat(KeyTankHeight, 0f), HeightMin, HeightMax);
-            _nozzleOffset = Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleOffset, 0f), NozzleMin, NozzleMax);
+            _tankHeight = Mathf.Clamp(PlayerPrefs.GetFloat(KeyTankHeight, DefaultTankHeight), HeightMin, HeightMax);
+            _nozzleOffset = Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleOffset, DefaultNozzleOffset), NozzleMin, NozzleMax);
             _panel = new Vector3(
                 Mathf.Clamp(PlayerPrefs.GetFloat(KeyPanelX, 0f), -PanelLateralMax, PanelLateralMax),
                 Mathf.Clamp(PlayerPrefs.GetFloat(KeyPanelY, 0f), -PanelHeightMax, PanelHeightMax),
                 Mathf.Clamp(PlayerPrefs.GetFloat(KeyPanelZ, 0f), -PanelDistanceMax, PanelDistanceMax));
             _tankShift = new Vector3(
-                Mathf.Clamp(PlayerPrefs.GetFloat(KeyShiftX, 0f), -ShiftMax, ShiftMax), 0f,
-                Mathf.Clamp(PlayerPrefs.GetFloat(KeyShiftZ, 0f), -ShiftMax, ShiftMax));
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyShiftX, DefaultTankShift.x), -ShiftMax, ShiftMax), 0f,
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyShiftZ, DefaultTankShift.z), -ShiftMax, ShiftMax));
             _tankRotation = new Vector3(
-                Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotX, 0f), -RotationMax, RotationMax),
-                Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotY, 0f), -RotationMax, RotationMax),
-                Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotZ, 0f), -RotationMax, RotationMax));
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotX, DefaultTankRotation.x), -RotationMax, RotationMax),
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotY, DefaultTankRotation.y), -RotationMax, RotationMax),
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotZ, DefaultTankRotation.z), -RotationMax, RotationMax));
+
+            int version = PlayerPrefs.GetInt(KeyVersion, 1);
+            if (version < SettingsVersion)
+            {
+                Debug.Log($"[GameSettings] Preferencias de la versión {version}: la calibración del " +
+                          "extintor pasa a los defaults nuevos.");
+                SetExtinguisherDefaults();
+                PlayerPrefs.SetInt(KeyVersion, SettingsVersion);
+                Save();
+            }
 
             // Para comprobar en el visor (adb logcat -s Unity) que la configuración sobrevivió al reinicio.
             Debug.Log($"[GameSettings] Cargado: volumen {_volume:0.0}, vibración {_vibration}, " +
