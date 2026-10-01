@@ -152,6 +152,40 @@ y la espuma sale de la boquilla izquierda.
   RTouch)` (grip). Expone `IsSpraying` para la futura lógica de apagado de fuegos.
 - Calibración: offset de la boquilla en `NozzleRig > ExtinguisherMount` (Position/Rotation
   Offset); parámetros del chorro (rate, speed, size, cono) en `NozzleTip > ExtinguisherSpray`.
+- **Densidad de la nube**: la manda `maxRate` (partículas/s). Los defaults del `.cs` NO alcanzan —
+  los campos están serializados en `NozzleRig.prefab` y ganan sobre ellos; cambiarlos sin tocar el
+  prefab no hace nada y no avisa. Para eso está `Extintores ▸ Tune Spray Density`, que reescribe el
+  prefab con las constantes `ExtinguisherSpray.Default*`. Al subir la densidad hay que **bajar el
+  alpha del tint**: cada partícula es un billboard traslúcido y lo que se paga en el Quest es el
+  overdraw, no la cantidad. El techo de partículas vivas se deriva de `maxRate × lifetime`, así que
+  no hay que acordarse de subir `maxParticles`.
+- **Subir la densidad NO debe apagar los fuegos más rápido.** `FireSource` cobra el daño *por
+  partícula*, así que triplicar el caudal triplicaba la velocidad de apagado — un desbalanceo del
+  ejercicio que ningún error delata. Por eso `FireSource` divide por `ExtinguisherSpray.ReferenceRate`
+  (220 p/s, el caudal con el que se calibró `healthPerParticle`): la densidad es una decisión
+  visual y el ritmo de apagado lo sigue fijando `healthPerParticle`.
+
+## Configuración del usuario (menú del lobby)
+
+`GameSettings` (estático, PlayerPrefs) guarda volumen, vibración y la calibración del prop; lo
+edita `SettingsMenu` (botón CONFIGURACIÓN del menú). Reglas:
+
+- **`OVRInput.SetControllerVibration` NO VIBRA en este proyecto.** Con el backend OpenXR de Unity,
+  el action set de háptica de OVRPlugin no se engancha a la sesión: cada llamada deja
+  `XR_ERROR_ACTIONSET_NOT_ATTACHED` en el log y nada más. Tampoco sirvió buscar el mando con
+  `UnityEngine.XR.InputDevices` filtrando por `Controller|HeldInHand`: no devolvió ninguno. Usar
+  siempre `Haptics.Set/Stop/Pulse`: va por el **Input System** (acción ligada a
+  `<XRController>{RightHand}/{Haptic}` → `OpenXRInput.SendHapticImpulse`) y respeta el switch.
+  Si no vibra, el log `[Haptics]` lista los dispositivos XR que veía el juego.
+- **No mandar `Haptics.Stop` en cada frame**: corta los pulsos de todos los demás en ese mando. El
+  chorro lo hacía con el gatillo suelto y ningún pulso llegaba a sentirse.
+- La calibración NO toca `positionOffset`/`rotationOffset` (esos son la calibración de fábrica de la
+  abrazadera): `ExtinguisherMount` suma encima la rotación del usuario (X/Y/Z, pivotando en el
+  `GripPoint`) y un deslizamiento sobre el eje del prop (`userSlide`/`slideAxis`; tanque = +Y del
+  `GripPoint`, boquilla = +Z).
+- El panel de extintores tampoco se mueve tocando los `PanelAnchor`: `TrainingSession.ApplyPanelPose`
+  suma `GameSettings.PanelOffset` en el espacio del anchor. El `SettingsPanel` es 100 % generado;
+  si se le agrega un campo a `SettingsMenu`, sumarlo a `RequiredRefs` y `Fix Scene Wiring` lo rehace.
 
 ## API útil para la lógica del extintor
 
@@ -164,6 +198,23 @@ OVRInput.ControllerInHandState state =
 
 ## Build
 
-1. Conectar el Quest por USB, aceptar "Allow USB debugging" dentro del visor.
-2. `File > Build Profiles` → **Meta Quest** → seleccionar el visor en Run Device.
-3. **Build and Run** (la primera build compila shaders + Gradle, tarda).
+Detalle completo (requisitos, instalación, troubleshooting): [`docs/BUILD-quest.md`](docs/BUILD-quest.md).
+
+Con el **editor cerrado**, desde la raíz del repo:
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools\build-quest.ps1 -Run
+```
+
+Compila el APK (`Build/Android/Extintores_v2.apk`), lo instala por `adb` y lo lanza en el visor.
+Sin flags sólo compila; `-Install` instala sin lanzar. La primera build tarda 15-30 min (shaders +
+IL2CPP); el log queda en `Logs/build-quest.log`.
+
+Desde el editor abierto: menú **Extintores ▸ Build APK (Quest)** (mismo APK, sin instalar).
+
+`Editor/QuestBuild.cs` fuerza antes de compilar ARM64 + IL2CPP + APK (no AAB) + un
+`applicationIdentifier` propio (`com.rv.extintores`, el proyecto traía el del template URP). Sin
+eso el build "termina bien" pero no instala o arranca en negro. Firma con el debug keystore de
+Unity, que alcanza para sideload.
+
+A mano, como antes: `File > Build Profiles` → **Meta Quest** → visor en Run Device → **Build and Run**.

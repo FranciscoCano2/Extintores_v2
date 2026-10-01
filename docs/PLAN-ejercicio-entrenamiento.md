@@ -53,6 +53,35 @@ La **quinta** ronda:
 | "El tiempo permanece en 0" | `TrainingManager.Start()` hacía `TimerRunning = Total > 0`, pero `autoCollectOnStart` está apagado **a propósito**, así que al arrancar hay 0 fuegos y el reloj no se encendía nunca. Los fuegos los elige `TrainingSession` mucho después. |
 | "El extintor K, ¿no es plateado?" | Sí. El químico húmedo se fabrica en acero inoxidable; estaba amarillo, que es el código británico BS EN 3. |
 
+La **sexta** ronda, ya en el patio industrial, fue de diseño:
+
+| Pedido | Qué implicó |
+|---|---|
+| Sacar los pisos de color debajo de los fuegos | Los `Pad` del blockout se borran del asset (`FixPads`); nadie los referencia. |
+| Panel de extintores translúcido y más adelante | Adelante-derecha (1,0 m al frente, 0,75 m al costado) en vez de al costado puro. Al quedar entre el usuario y el fuego, el fondo tiene que ser **translúcido**: si no, lo tapa. La regla vieja de "+90°" pasó a `WarehouseBuilder.PanelPose`, y el chequeo viejo del fixer (que "corregía" todo lo que no estuviera a 90°) se reemplazó. |
+| HUD chico en una esquina, grande al equivocarse | `BodyLockedPanel.Corner`: arriba-izquierda, siguiendo la mirada con retraso. El aviso de extintor equivocado (ahora 3 s) y el de nivel superado lo traen grande al frente, como antes. |
+| En Aleatorio no tiene que estar la respuesta | Había **dos** respuestas: la letra sobre el fuego y el verde/rojo del panel. Se esconden las dos (`FireClassBadge.SuppressedByMode`, `BayHighlighter.HideAnswers`), aparte del toggle del mando para que no se pueda revelar. |
+| Arrancar en el centro y elegir el elemento desde ahí | Lobby a (0, 0, 0). Los elementos tienen que verse en reposo → `FireStation.Deactivate` apaga sólo la llama. Cada puesto tiene un cartel apuntable (`FireStation.Selector`) y el láser pasó de 8 a 12 m: los elementos están a ~8,7 m. |
+
+La **séptima** ronda, ya probando la sexta en el visor:
+
+| Síntoma reportado | Causa real |
+|---|---|
+| "En Personalizado siempre se apaga el fuego, use el extintor que use" | La matriz devuelve multiplicadores, y **cualquier valor positivo apagaba**, sólo que más lento (ABC sobre K = 0,3; Espuma sobre K = 0,2). Con el caudal del chorro la diferencia no se notaba. Ahora sólo apaga lo que supera `ExtinguishMatrix.EffectiveThreshold`; lo del medio no hace nada y avisa "extintor equivocado". Ojo: ABC sobre A, B o C **sí** apaga, vale 1,0 — es el multipropósito. |
+| "Si no soltás el gatillo a tiempo, al elegir PERSONALIZADO se acciona VOLVER" | `rearmSeconds` bloquea **el mismo** botón, no el que aparece después bajo el rayo. VOLVER queda a 10 cm de PERSONALIZADO y se llenaba en 0,35 s con el gatillo todavía apretado. Ahora hay que soltar (`SprayButton.AnyPressed` → `LaserPointer._waitRelease`). |
+| "En el panel unos botones se ven grises y otros blancos, pero se pueden elegir todos" | No era el estado del botón: era **orden de dibujo**. El fondo translúcido nuevo y las placas/textos (`Sprites/Default`) estaban todos en la cola 3000, que URP ordena por distancia; con el panel girado, los botones del lado lejano se dibujaban antes que el fondo y quedaban velados. El fondo pasó a la cola 2990. |
+| "El panel aparece en el menú de inicio" + "ponelo más lejos, más arriba y más a la derecha" | En el lobby no hay fuego: el panel se **desactiva** (antes sólo se movía a un anchor del lobby). En el puesto va a 1,4 m al frente / 1,0 m a la derecha / base a 1,05 m. |
+| "El puntero tiene que estar permanente" | Se ve siempre en los menús (lobby y "Continuar"); mientras hay fuego sigue apareciendo sólo sobre un botón, para no estorbar y para poder elegir extintor en el panel. |
+
+La **octava** ronda, sobre lo mismo:
+
+| Síntoma reportado | Causa real |
+|---|---|
+| "Los botones del panel siguen mezclados en grises y negros, y en el tutorial los deshabilitados también" | El arreglo anterior (bajarle la `renderQueue` al fondo translúcido) **no sobrevive**: URP reescribe la cola a 3000 cada vez que valida el material, y el `.mat` volvía solo. Ahora el orden lo fija `Renderer.sortingOrder` en las piezas del botón, que vive en el renderer y no lo pisa nadie. |
+| "El láser tiene que verse apuntando a cualquier parte del tablero" | El rayo sólo se dibujaba sobre un `SprayButton`. El `Backboard` pasó a tener un collider **trigger** en la layer `Interactable`: el láser lo ve (raycast con `QueryTriggerInteraction.Collide`) y el chorro lo atraviesa, porque la colisión de partículas ignora los triggers y tiene que seguir llegando al fuego. |
+| "La boquilla tiene que cambiar de color con el extintor" | La boquilla vive en OTRO rig (mano izquierda), así que `ExtinguisherSwappable` no la alcanzaba; además usaba la textura ROJA del pack, sobre la que cualquier tinte da negro. Ahora usa el material tintable y se cablea en `extraBodyRenderers`. |
+| "El panel, 20 cm más atrás y 30 cm a la derecha" | `PanelForward` 1,6 m y `PanelSide` 1,3 m (a ~2,1 m del usuario, ~39° a la derecha). |
+
 ## 2. Decisiones tomadas (y por qué)
 
 - **Los botones se apuntan con un LÁSER, no con el chorro.** El chorro se probó primero y falló por
@@ -87,6 +116,29 @@ La **quinta** ronda:
 - **Elegir el extintor también se hace con el chorro.** Cada bahía tiene su botón `Selector`; meter
   el tanque en la bahía sigue andando como gesto realista. Un solo vocabulario de interacción para
   toda la app.
+- **El extintor no efectivo NO apaga, ni un poco.** La matriz sigue teniendo valores intermedios
+  (CO2 sobre A = 0,3), pero por debajo de `ExtinguishMatrix.EffectiveThreshold` (0,9) el fuego no
+  baja y se avisa "extintor equivocado". Un apagado lento es indistinguible de uno normal cuando el
+  chorro tira 3 segundos, y el ejercicio entero dejaba de enseñar nada. El mismo umbral decide qué
+  bahías habilita el tutorial y qué marco pinta verde el panel.
+- **Después de accionar un botón hay que soltar el gatillo.** Al cambiar de menú aparece otro botón
+  bajo el rayo y se accionaba solo. El `rearmSeconds` no alcanzaba: bloquea un botón, no el gesto.
+- **El orden de dibujo de los carteles se fija con `sortingOrder`, no con `renderQueue`.** URP
+  revalida los materiales y devuelve la cola a la del Surface Type; el `sortingOrder` es del
+  renderer y sobrevive.
+- **La boquilla es parte del extintor**: se pinta del mismo color y cambia con él.
+- **El láser se ve apuntando al tablero entero**, no sólo a un botón: el tablero es el objeto con
+  el que se interactúa, y el rayo apareciendo sólo sobre cada botón se sentía intermitente.
+- **El panel de extintores sólo existe donde hay fuego.** En el lobby se desactiva: no hay qué
+  elegir y compite con el menú.
+- **El rayo se ve siempre en los menús, y sólo sobre un botón mientras hay fuego.** En un menú el
+  rayo ES el cursor y esconderlo obliga a barrer a ciegas; apagando fuego es ruido visual.
+- **Personalizado se elige apuntando al ELEMENTO, no a una letra.** Desde el centro del patio se
+  ven los 4 (auto, tablero…); el cartel dice qué es, no de qué clase es, porque la clase es lo que
+  el ejercicio enseña.
+- **En Aleatorio no hay ayudas.** Ni letra de clase ni verde/rojo en el panel: son la respuesta.
+- **El HUD normal va chico en un rincón; los avisos, grandes al frente.** Tiempo y nivel no hace
+  falta leerlos de frente; "extintor equivocado" sí.
 - **El HUD acompaña al usuario, pero no va pegado a la cabeza.** `BodyLockedPanel`: queda quieto en
   el mundo mientras mirás alrededor y se reacomoda —despacio— sólo cuando la mirada se va más de
   35°. Es el patrón de confort estándar en VR; clavarlo al ojo marea y no se puede leer.
@@ -114,9 +166,10 @@ De ahí salen **dos reglas, según dónde esté el cartel**, y confundirlas cost
 | Dónde está | Yaw del anchor | Por qué |
 |---|---|---|
 | **Al frente** (menú del lobby) | igual que el usuario | Su −Z ya le queda de cara. |
-| **Al costado** (panel de extintores) | usuario **+ 90°** | Con el mismo yaw que el usuario, el −Z apunta a su espalda: había que darse vuelta entero para leerlo. |
+| **Adelante-derecha** (panel de extintores) | usuario **+ ángulo hacia el panel** (~37°) | El +Z tiene que apuntar DESDE el usuario HACIA el panel. Con el mismo yaw quedaría de canto; con +90° (la regla de cuando iba al costado puro) quedaría de espaldas. |
+| **Sobre un elemento** (selector de Personalizado) | mirando desde el lobby hacia el elemento | El −Z queda de cara al centro del patio. |
 
-Lo resuelve `WarehouseBuilder.PanelRotation`.
+Lo resuelve `WarehouseBuilder.PanelPose` (y `StationSelectorBuilder` para los selectores).
 
 Si algo se ve espejado, o el trigger de una bahía no dispara, o un rótulo queda tapado: **revisá
 este eje antes que ninguna otra cosa**. El `WallBuilder` original ponía los rótulos en +Z y hubo que
@@ -126,15 +179,16 @@ corregirlos a mano en el prefab; quedó arreglado en origen.
 
 ```
 TrainingSession            ← orquesta: modo, cola de puestos, reposicionamiento
- ├── FireStation[]         ← un puesto = FireSource + PlayerSpawn + PanelAnchor
+ ├── FireStation[]         ← un puesto = FireSource + PlayerSpawn + PanelAnchor + Selector
+ │                            (en reposo: elemento visible, llama apagada)
  ├── FireManager           ← cuenta SOLO los fuegos de la etapa (BeginSession)
- ├── ExtinguisherStation   ← el panel, se mueve al costado del usuario en cada puesto
+ ├── ExtinguisherStation   ← el panel (fondo translúcido), adelante-derecha del usuario
  │    └── ExtinguisherBay[]  ← + SprayButton "Selector" por bahía
- └── SprayButton           ← "Continuar", y los 8 del menú
-MainMenu                   ← 3 modos + submenú de 4 clases
-LaserPointer               ← en el NozzleTip: apunta y acciona TODOS los SprayButton
-TrainingHud + BodyLockedPanel ← cartel que te sigue con zona muerta (NO cuelga del ojo)
-Warehouse_Blockout         ← SÓLO anchors (Zone_A..K, Lobby) + Pad de color; Shell/Dressing apagados
+ └── SprayButton           ← "Continuar", y los botones del menú
+MainMenu                   ← 3 modos; Personalizado = indicación + Volver + selectores de puesto
+LaserPointer               ← en el NozzleTip: apunta y acciona TODOS los SprayButton (12 m)
+TrainingHud + BodyLockedPanel ← chico en la esquina; grande con zona muerta al avisar (NO cuelga del ojo)
+Warehouse_Blockout         ← SÓLO anchors (Zone_A..K, Lobby en el centro); Shell/Dressing apagados
 Yard_Industrial            ← escenografía del pack: piso, muro, props por zona, horizonte
 ```
 
@@ -229,16 +283,58 @@ Yard_Industrial            ← escenografía del pack: piso, muro, props por zon
 - [x] **Etiqueta de la bahía BC** (`Label_BC.png`: letras "BC" y sólo los chips B y C). La asigna
       `Fix Scene Wiring` (`FixBayLabels`) editando el asset, sin rehacer la pared.
 
+- [x] **Sexta ronda en código** (compila): sin Pads, panel translúcido adelante-derecha, HUD en
+      la esquina, Aleatorio sin respuestas, lobby al centro y Personalizado apuntando al elemento.
+
 ### Pendiente ⬜
 
+- [x] **Séptima ronda en código** (compila): el extintor no efectivo no apaga, soltar el gatillo
+      entre selecciones, fondo del panel en cola 2990, panel oculto en el lobby y más lejos/arriba,
+      láser permanente en menús.
+
+- [x] **Octava ronda en código** (compila): botones con `sortingOrder` propio, láser sobre todo el
+      tablero (fondo con collider trigger), panel a 1,6/1,3 m y boquilla teñida con el extintor.
+
+- [x] **Menú Configuración en código** (`SettingsMenu` + `GameSettings`, persiste en PlayerPrefs):
+      volumen (`AudioListener.volume`, pasos de 10 %), vibración sí/no (toda vibración pasa por
+      `Haptics`, que la respeta) y la calibración del prop: **altura del mando sobre el tanque** y
+      **corrimiento de la boquilla**, de a 1 cm. La orientación mando↔prop es fija (la abrazadera,
+      en el `rotationOffset`); el usuario sólo desliza sobre el eje del prop (+Y del `GripPoint`
+      en el tanque, +Z en la boquilla), así el apuntado rota junto con el extintor. Se ve al instante.
+- [x] Menú Configuración aplicado en `Training.unity` (19/09).
+- [x] **Posición del panel de extintores en Configuración** (segunda página): lateral / altura /
+      distancia de a 5 cm, en el espacio del `PanelAnchor` (así vale igual en los 4 puestos). Si se
+      corre de costado o en profundidad, `TrainingSession.ApplyPanelPose` lo re-gira en yaw para que
+      siga de cara al spawn (§3). Con la página abierta el panel se muestra en el lobby
+      (`PreviewPanel`, en `Lobby/PanelAnchor`) para ajustarlo viéndolo.
+- [x] Página del panel aplicada en `Training.unity` (19/09).
+- [x] **Rotación del extintor en Configuración** (X/Y/Z de a 5°, ±90°, pivotando en la abrazadera).
+      Configuración pasa a tres páginas: General · Ajustar extintor · Posición del panel.
+- [x] **Vibración arreglada** (no vibraba nunca): `OVRInput` no puede vibrar con el backend OpenXR
+      de Unity (`XR_ERROR_ACTIONSET_NOT_ATTACHED`), y además el chorro mandaba "parar" en cada frame.
+      Ahora todo va por `Haptics` → `OpenXRInput`; el chorro vibra en los dos mandos.
+- [x] Tres páginas aplicadas en la escena (19/09). La vibración **siguió sin andar**: la búsqueda
+      por `UnityEngine.XR.InputDevices` no encontró ningún mando. Pasó al Input System (usage
+      `Haptic`, común a todos los perfiles OpenXR del Quest, incluidos los *detached*).
+- [x] **Desplazamiento X/Z del tanque** (±15 cm, de a 1 cm), perpendicular a su eje; el eje largo
+      sigue siendo la altura del mando.
+- [ ] Aplicar en la escena: `Fix Scene Wiring` rehace el `SettingsPanel` → Ctrl+S.
+- [ ] Confirmar en el visor que vibra; si no, pasar las líneas `[Haptics]` del log.
+- [ ] Probar en el visor que la configuración **persiste**: cambiar algo, cerrar la app del todo,
+      abrirla y ver que sigue igual (también tras reinstalar con `build-quest.ps1`). El log
+      `[GameSettings] Cargado: …` muestra lo leído al arrancar.
+
+- [ ] **Aplicar la séptima y la octava ronda en la escena**: `Validate Setup` (tiene que marcar los
+      PanelAnchor, el collider del fondo del panel y la boquilla sin teñir) → `Fix Scene Wiring` →
+      Ctrl+S → `Validate Setup` en cero.
 - [ ] **Build & Run en el Quest** — imprescindible: por Link no llegan ni la colisión de partículas
       ni la pose de los mandos. Checklist en §6.
 - [ ] Ajustar en el visor: comodidad del HUD (`BodyLockedPanel`: `distance` 1,5 m, `heightOffset`
       −0,45 m, `deadZoneDegrees` 35°), grosor/alcance del rayo (`LaserPointer`) y el dwell de los
       botones (`fillSeconds` 0,35 s) si molesta accionar sin querer al barrer.
-- [ ] El panel queda a 0,75 m del costado (`WarehouseBuilder.PanelSide`), medida pensada para
-      alcanzarlo con el brazo. Con el láser ya no hace falta que esté al alcance: se podría alejar
-      y agrandar. Decidirlo con el visor puesto.
+- [ ] Ajustar en el visor la pose del panel (`WarehouseBuilder.PanelForward` 1,4 m / `PanelSide`
+      1,0 m / `PanelHeight` 1,05 m) y su transparencia (`WallBuilder.BoardColor`, alfa 0,28). Ya no está al alcance del
+      brazo: se elige con el láser.
 - [ ] **Patio industrial aplicado en la escena** (54 renderers, 5.880 triángulos; anchors del
       blockout con los mismos fileID). Falta confirmar que `Validate Setup` no marca despejes y
       ajustar las posiciones con el visor puesto, en la tabla `Props` de `YardBuilder.cs`.
@@ -295,15 +391,56 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
 - [ ] **Aleatorio**: un solo fuego, distinto entre partidas.
 - [ ] **Personalizado**: aparece el fuego elegido.
 - [ ] Al apagar un fuego **no** te teletransporta: aparece "Continuar".
-- [ ] El panel se alcanza con el brazo sin caminar.
 - [ ] Con el agente equivocado el fuego se aviva y suena el aviso.
+- [ ] Arrancás **en el centro del patio**, con el menú al frente y los 4 elementos a la vista (sin
+      llamas y sin pisos de color).
+- [ ] **Personalizado**: aparecen los carteles sobre los elementos; el láser los alcanza desde el
+      centro y disparar sobre uno te lleva a ese puesto.
+- [ ] El panel de extintores es **translúcido** y deja ver el fuego detrás; se apunta cómodo.
+- [ ] Los botones del panel se ven **todos iguales** (y los grises del tutorial, todos del mismo
+      gris) desde cualquier ángulo.
+- [ ] El rayo se ve apuntando a **cualquier parte del tablero**, y el chorro lo atraviesa: apuntando
+      al fuego a través del panel, el fuego se apaga igual.
+- [ ] La **boquilla** es del mismo color que el tanque y cambia con él (azul agua, negro CO2, acero K).
+- [ ] En el lobby **no hay panel** de extintores; en el puesto aparece adelante-derecha, a la
+      altura de la vista, y **todos sus botones se ven igual** desde cualquier ángulo.
+- [ ] Con el gatillo sostenido, elegir PERSONALIZADO **no** acciona VOLVER (hay que soltar).
+- [ ] En menús el rayo **se ve siempre**; con fuego sólo sobre un botón; vuelve al aparecer CONTINUAR.
+- [ ] Con un extintor no efectivo (p. ej. ABC sobre la cocina) el fuego **no baja** y aparece
+      "EXTINTOR EQUIVOCADO"; con el correcto se apaga.
+- [ ] Tiempo/nivel **chico arriba a la izquierda** sin marear; con el extintor equivocado aparece
+      grande al frente ~3 s.
+- [ ] **Aleatorio**: ni letra sobre el fuego ni verde/rojo en el panel (tampoco con el botón B).
 - [ ] Framerate estable con el patio + VFX.
+- [ ] El chorro se ve como una **nube compacta** (no puntos sueltos contables) y el framerate
+      aguanta con el grip a fondo apuntando de cerca — es el peor caso de overdraw.
 - [ ] El menú, el HUD y los rótulos de los botones **se leen contra el cielo** (el blockout tenía
       paredes grises atrás; ahora puede haber cielo brillante).
 - [ ] Ningún prop del patio tapa un fuego, el panel o el menú, y no se ven bordes del piso ni
       hangares "huecos" desde ningún puesto.
 
 ## 7. Gotchas de esta fase
+
+- **La densidad del chorro es también un parámetro de dificultad.** El daño se cobra *por partícula*
+  (`FireSource.healthPerParticle`), así que pasar el caudal de 220 a 650 p/s apagaba los fuegos casi
+  3× más rápido, cambiando los tiempos del ejercicio sin un solo error de por medio. `FireSource`
+  normaliza ahora por `ExtinguisherSpray.ReferenceRate`; si algún día se cambia la calibración del
+  apagado, es `healthPerParticle` lo que hay que tocar, no el caudal.
+- **Dos materiales transparentes en la misma cola se ordenan por distancia, no por jerarquía.** El
+  fondo del panel (translúcido) y las placas de los botones (`Sprites/Default`) estaban los dos en
+  3000: con el panel girado, media fila de botones se dibujaba antes que el fondo y se veía velada.
+  Si un cartel se ve "sucio" de un lado y limpio del otro, mirá el orden de dibujo antes que el color.
+- **`material.renderQueue` no se puede fijar a mano en URP.** Al validar el material (import,
+  cambio de propiedades) URP la reescribe según el Surface Type: se puso 2990 y el `.mat` volvió a
+  3000 solo. Para ordenar transparentes, `Renderer.sortingOrder`.
+- **Un collider en la layer de los botones también frena el chorro.** Salvo que sea trigger: la
+  colisión de partículas los ignora. Por eso el fondo del panel es trigger — si no, las partículas
+  morían contra el tablero en vez de llegar al fuego.
+- **Un multiplicador positivo chico igual apaga.** La matriz tenía 0,2–0,4 pensados como "casi
+  inútil", pero multiplicados por el caudal del chorro apagaban igual. "Casi inútil" hay que
+  escribirlo como cero.
+- **`rearmSeconds` bloquea un botón, no el gesto.** Con el gatillo sostenido, el botón que aparece
+  después bajo el rayo se acciona solo. Al accionar algo que cambia de pantalla, exigir soltar.
 
 - **El cableado de escena falla en silencio.** Ninguno de los bugs de agosto ni de septiembre daba
   error de compilación ni excepción. Ante "el código está pero no funciona", correr
@@ -365,3 +502,5 @@ FloorLevel ✓ · HUD suelto con `BodyLockedPanel` ✓ · `LaserPointer` en esce
 | `Extintores ▸ Optimize FireCause Models` | Comprime mallas y reporta tri-count. |
 | `Extintores ▸ Fix Sketchfab Textures` | Corrige importadores de textura de los props. |
 | `Extintores ▸ Add ABC Label to Selected` | Pega la calcomanía ABC en el tanque. |
+| `Extintores ▸ Tune Spray Density` | Reescribe los parámetros del chorro en `NozzleRig.prefab` con las constantes del script. Sin esto, cambiar los defaults del `.cs` no mueve la densidad. |
+| `Extintores ▸ Build APK (Quest)` | Compila el APK de sideload (ARM64 + IL2CPP). Ver [`BUILD-quest.md`](BUILD-quest.md). |
