@@ -129,14 +129,9 @@ Comportamiento resultante (sin superposiciones):
   `Universal Render Pipeline/Lit` (`guid 933532a4fcc9baf4fa0491de14d08ed7`), mapeando `_MainTex`
   → `_BaseMap`. Ojo: otros packs importados (p. ej. props sueltos) pueden tener el mismo
   problema; convertir con el Render Pipeline Converter o cambiando el shader a URP/Lit.
-- **El modelo NO tiene boquilla/manguera: hay que crearla o importar otro modelo.** El FBX
-  `Assets/Fire_Extinguisher/fire extinguisher.fbx` (de un pack "Police") contiene SOLO dos
-  Models: `FireExtinguisher` (tanque) y `Glass_Part` (visor del manómetro). No hay malla de
-  boquilla ni de palanca. ⚠️ El `.meta` del FBX lista `Object003`/`Object004` en
-  `fileIDToRecycleName`, pero son nombres OBSOLETOS de una versión anterior del FBX que fue
-  sobreescrita; el binario actual no los tiene (verificado con `strings`). Reinstanciar el FBX
-  NO agrega la boquilla. Para tenerla: modelar una simple con primitivas (cono/cilindro en
-  `NozzleTip`) o importar un modelo de extintor más completo.
+- **El tanque ya NO es el FBX del pack.** `Assets/Fire_Extinguisher/fire extinguisher.fbx` (pack
+  "Police", sin boquilla ni palanca, estirado a 48 × 15 cm por `ExtinguisherSizer`) queda en el repo
+  sólo para `SampleScene`. El juego usa el modelo propio del extintor real (ver "Modelo del extintor").
 - **`RightHandAnchor`/`LeftHandAnchor` NO siguen el mando físico en multimodal.** El
   `OVRCameraRig` los mueve a `GetLocalControllerPosition(GetActiveControllerForHand(...))`, y
   `GetActiveControllerForHand` **da prioridad a la mano rastreada**. Un objeto acoplado a ese
@@ -151,8 +146,8 @@ Uso realista: el **tanque va en la mano derecha** (`ExtinguisherRig`, `MountHand
 `followController`). El disparo lo hace el **grip del mando DERECHO** (simula apretar la palanca)
 y la espuma sale de la boquilla izquierda.
 
-- `NozzleRig` = mount izquierdo + `Visual` (Hose/Horn con cilindros primitivos, material del
-  tanque) + `NozzleTip` con `ExtinguisherSpray`. Se arrastra a la escena y sigue el mando
+- `NozzleRig` = mount izquierdo + `Visual` (`Boquilla`, el modelo de `Boquilla.fbx`, con el
+  conector `HoseInlet`) + `NozzleTip` con `ExtinguisherSpray` + `HoseTube` (la manguera). Se arrastra a la escena y sigue el mando
   izquierdo solo (el mount, si no tiene anchor/trackingSpace, busca `OVRCameraRig.trackingSpace`
   con `FindFirstObjectByType`).
 - `ExtinguisherSpray` (en `NozzleTip`): crea su propio `ParticleSystem` por código (textura de
@@ -174,6 +169,39 @@ y la espuma sale de la boquilla izquierda.
   ejercicio que ningún error delata. Por eso `FireSource` divide por `ExtinguisherSpray.ReferenceRate`
   (220 p/s, el caudal con el que se calibró `healthPerParticle`): la densidad es una decisión
   visual y el ritmo de apagado lo sigue fijando `healthPerParticle`.
+
+## Modelo del extintor (1 kg real) y manguera
+
+El tanque es un modelo **propio y paramétrico** del extintor real del usuario (ABC 1 kg de auto:
+34,8 cm de alto, Ø 7,65 cm, salida de la válvula a 29,8 cm; lo demás estimado de las fotos).
+
+- **Fuente:** `tools/blender/extintor_1kg.py` (dict `P` con todas las medidas). Se regenera con
+  `powershell -ExecutionPolicy Bypass -File toolslenderuild-extintor.ps1 [-Render]` (Blender 4.5 en
+  background, sin Unity). Salidas en `Assets/Extintores/Extinguisher/Real/`: `Extintor_1kg.fbx`
+  (`Body` tintable · `Details` bronce/manómetro con atlas de 512 px · `Label` banda para las etiquetas ·
+  empty `HoseOutlet`; 1.372 triángulos), `Boquilla.fbx` (origen en la punta, empty `HoseInlet`) y
+  `models/print/extintor_1kg.stl` para **imprimir** (un solo sólido cerrado, 0 aristas no-manifold,
+  en **milímetros**; 34,8 cm no entra en camas de 22–25 cm).
+- **Si cambiás una medida de `P`, revisá las constantes `NewNeckY`/`NewTopY` de `ExtinguisherModelTool`**
+  (son las mismas alturas) y volvé a correr el Swap.
+- **La calibración del prop no se tocó al cambiar de modelo.** `GripPoint`, offsets del mount y los
+  defaults de `GameSettings` se midieron con el modelo viejo, y lo que coincidía con el real era la
+  **válvula/agarre**. `Extintores ▸ Swap Extinguisher Model (1 kg real)` coloca el modelo nuevo debajo del
+  GripPoint con el mismo eje, el centro de la cabeza (válvula + palanca) a la misma altura y la salida
+  para el mismo lado (−X del rig) — y no guarda el prefab si el GripPoint se mueve. `Preview Extinguisher
+  Swap` renderiza viejo vs nuevo + el mando en `Logs/ExtinguisherPreview/`.
+- Se **quitó `ExtinguisherSizer`** del `Visual`: es `[ExecuteAlways]` y en `OnEnable` reescalaría el
+  modelo (que ya viene a escala real) a 48 cm, arrastrando el GripPoint. Validate lo marca si vuelve.
+- Material tintable liso `M_Extinguisher_Paint` (sin textura: `_BaseColor` = color del agente).
+  `ExtinguisherBodyTool.BodyMaterial` apunta ahí; el gris desaturado del pack sólo sirve para las UV
+  del modelo viejo.
+- **Manguera** (`ExtinguisherHose`, en `NozzleRig/HoseTube`): tubo de 60 cm sobre una Bézier cúbica
+  `HoseOutlet` → `HoseInlet`, con la caída resuelta para que el **largo de arco sea fijo**; si las manos
+  se separan más que eso queda recta (no hay de dónde sacar manguera: los dos extremos van atados a
+  mandos). 16 tramos × 8 lados, malla reutilizada, cero allocs, sin collider (no frena el chorro ni
+  la ve el láser), sin sombras. Al colgar del NozzleRig, `FixNozzleTint` la tiñe con el extintor.
+  Su `outlet` es una referencia de escena entre dos prefabs: la cablea `Fix Scene Wiring` (`FixHose`),
+  y en runtime cae al hijo `HoseOutlet` del `ExtinguisherSwappable` si falta.
 
 ## Configuración del usuario (menú del lobby)
 
