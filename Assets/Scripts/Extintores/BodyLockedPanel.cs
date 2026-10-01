@@ -16,6 +16,11 @@ namespace Extintores
     /// La cara legible del cartel es su <b>−Z</b> (convención de TextMesh/Quad de Unity, la misma de
     /// <see cref="SprayButton"/>), así que el panel apunta su +Z en la dirección en la que mira el
     /// usuario, no hacia él.
+    ///
+    /// <b>Modo esquina</b> (<see cref="Corner"/>): el cartel chico va en un rincón de la vista y la
+    /// sigue (yaw y pitch) con suavizado. Sigue sin colgar del <c>CenterEyeAnchor</c>: el retraso del
+    /// seguimiento es lo que evita que se sienta pegado a la cara. Es para información secundaria
+    /// que no hace falta leer de frente (tiempo y nivel).
     /// </summary>
     [DefaultExecutionOrder(100)] // después de que el rig haya movido la cabeza este frame
     public class BodyLockedPanel : MonoBehaviour
@@ -43,8 +48,31 @@ namespace Extintores
                  "puesto: TrainingSession teletransporta el rig y el cartel no debe viajar volando).")]
         [SerializeField] private float snapDistance = 1.5f;
 
+        [Header("Modo esquina")]
+        [Tooltip("Dónde va el cartel chico respecto de la cabeza: X lateral (negativo = izquierda), " +
+                 "Y sobre la línea de los ojos, Z al frente.")]
+        [SerializeField] private Vector3 cornerOffset = new Vector3(-0.22f, 0.16f, 0.8f);
+        [Tooltip("Qué tan rápido alcanza a la mirada (1/s). Más alto = más pegado a la cabeza.")]
+        [SerializeField] private float cornerFollowSpeed = 10f;
+
         private float _yaw;
         private bool _chasing;
+        private bool _corner;
+
+        /// <summary>
+        /// Cartel chico en un rincón de la vista (true) o cartel con zona muerta delante (false). Al
+        /// cambiar de modo se recoloca de una: no viaja volando por el campo visual.
+        /// </summary>
+        public bool Corner
+        {
+            get => _corner;
+            set
+            {
+                if (_corner == value) return;
+                _corner = value;
+                Snap();
+            }
+        }
 
         private void Awake()
         {
@@ -66,12 +94,26 @@ namespace Extintores
             if (head == null) return;
             _yaw = head.eulerAngles.y;
             _chasing = false;
-            transform.SetPositionAndRotation(TargetPosition(_yaw), Quaternion.Euler(0f, _yaw, 0f));
+            if (_corner) transform.SetPositionAndRotation(CornerPosition(), CornerRotation());
+            else transform.SetPositionAndRotation(TargetPosition(_yaw), Quaternion.Euler(0f, _yaw, 0f));
         }
 
         private void LateUpdate()
         {
             if (head == null) return;
+
+            if (_corner)
+            {
+                if ((transform.position - CornerPosition()).sqrMagnitude > snapDistance * snapDistance)
+                {
+                    Snap();
+                    return;
+                }
+                float k = 1f - Mathf.Exp(-cornerFollowSpeed * Time.deltaTime);
+                transform.position = Vector3.Lerp(transform.position, CornerPosition(), k);
+                transform.rotation = Quaternion.Slerp(transform.rotation, CornerRotation(), k);
+                return;
+            }
 
             // Un salto grande (cambio de puesto) no se persigue: se aparece ya colocado.
             if ((transform.position - TargetPosition(_yaw)).sqrMagnitude > snapDistance * snapDistance)
@@ -96,6 +138,15 @@ namespace Extintores
                                                      moveSpeed * Time.deltaTime);
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
         }
+
+        /// <summary>Rincón de la vista: sigue yaw y pitch de la cabeza, pero nunca el roll.</summary>
+        private Quaternion CornerRotation()
+        {
+            var e = head.eulerAngles;
+            return Quaternion.Euler(e.x, e.y, 0f);
+        }
+
+        private Vector3 CornerPosition() => head.position + CornerRotation() * cornerOffset;
 
         /// <summary>Dónde va el cartel para un yaw dado. Siempre a nivel: nunca se inclina.</summary>
         private Vector3 TargetPosition(float yaw)

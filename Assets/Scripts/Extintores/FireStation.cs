@@ -23,12 +23,17 @@ namespace Extintores
         [Tooltip("Dónde queda parado el usuario: posición y orientación (mirando al fuego).")]
         [SerializeField] private Transform playerSpawn;
 
-        [Tooltip("Dónde se coloca el panel de extintores, al alcance del brazo del usuario.")]
+        [Tooltip("Dónde se coloca el panel de extintores, adelante a la derecha del usuario.")]
         [SerializeField] private Transform panelAnchor;
+
+        [Tooltip("Cartel apuntable sobre el elemento, para elegir este puesto desde el lobby en modo " +
+                 "Personalizado. Lo crea Extintores ▸ Fix Scene Wiring. Arranca oculto.")]
+        [SerializeField] private SprayButton selector;
 
         public FireSource Fire => fire;
         public Transform PlayerSpawn => playerSpawn != null ? playerSpawn : transform;
         public Transform PanelAnchor => panelAnchor;
+        public SprayButton Selector => selector;
 
         /// <summary>Clase del fuego de este puesto (la lee del propio <see cref="FireSource"/>).</summary>
         public FireClass Class => fire != null ? fire.Class : FireClass.A;
@@ -59,11 +64,26 @@ namespace Extintores
             if (fire != null) fire.ResetFire();
         }
 
-        /// <summary>Apaga y oculta el puesto sin contarlo como "extinguido".</summary>
+        /// <summary>
+        /// Deja el puesto en reposo sin contarlo como "extinguido": se apaga <b>sólo la llama</b> y
+        /// el elemento (auto, tablero…) sigue a la vista, para poder elegirlo desde el centro del
+        /// patio en modo Personalizado. El badge se esconde solo (<c>FireClassBadge.OnDisable</c>).
+        /// </summary>
         public void Deactivate()
         {
-            if (fireRoot != null) fireRoot.SetActive(false);
-            else if (fire != null) fire.gameObject.SetActive(false);
+            if (fire != null && fire.gameObject != fireRoot)
+            {
+                if (fireRoot != null && !fireRoot.activeSelf) fireRoot.SetActive(true);
+                fire.gameObject.SetActive(false);
+            }
+            else if (fireRoot != null) fireRoot.SetActive(false);
+        }
+
+        /// <summary>Muestra u oculta el cartel apuntable de este puesto.</summary>
+        public void SetSelectable(bool value)
+        {
+            if (selector != null && selector.gameObject.activeSelf != value)
+                selector.gameObject.SetActive(value);
         }
     }
 }

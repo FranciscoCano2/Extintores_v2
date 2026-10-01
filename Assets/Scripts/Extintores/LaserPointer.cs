@@ -17,9 +17,13 @@ namespace Extintores
     /// (<see cref="SprayButton.Hold"/>, ~⅓ de segundo). Apoyar el rayo por sí solo no hace nada:
     /// si bastara con posarlo, cruzar la mirada por el menú activaría cosas sin querer.
     ///
-    /// El rayo <b>se muestra únicamente cuando está sobre un botón accionable</b>. Un láser
-    /// permanente es ruido visual mientras se apaga fuego, y ver el rayo aparecer ya es la señal de
-    /// "acá hay algo que se puede apretar".
+    /// <b>Cuándo se ve el rayo:</b> en los menús (lobby, y "Continuar" con el fuego ya apagado) se ve
+    /// <b>siempre</b>, para poder apuntar. Mientras hay fuego se oculta y aparece sólo sobre un botón
+    /// accionable (el panel de extintores): un láser permanente es ruido visual al apagar.
+    ///
+    /// <b>Tras accionar un botón hay que soltar el gatillo</b> antes de cargar otro. Al cambiar de
+    /// menú aparece un botón nuevo bajo el rayo (VOLVER justo debajo de PERSONALIZADO) y, con el
+    /// gatillo todavía apretado, se accionaba solo.
     ///
     /// Mientras haya un LaserPointer activo, el chorro <b>deja</b> de accionar botones por colisión
     /// de partículas (<see cref="ActiveCount"/>). Si no hay ninguno, el chorro sigue funcionando
@@ -39,16 +43,20 @@ namespace Extintores
         [SerializeField] private ExtinguisherSpray spray;
 
         [Header("Alcance")]
-        [Tooltip("Largo máximo del rayo (m).")]
-        [SerializeField] private float maxDistance = 8f;
+        /// <summary>Alcance mínimo: desde el centro del patio los elementos quedan a ~8,7 m.</summary>
+        public const float MinReach = 12f;
+
+        [Tooltip("Largo máximo del rayo (m). Desde el centro del patio hay que llegar a los elementos " +
+                 "de Personalizado, que están a ~8,7 m.")]
+        [SerializeField] private float maxDistance = MinReach;
         [Tooltip("Contra qué layers apunta. En 'Nothing' usa la layer de los botones.")]
         [SerializeField] private LayerMask hits = 0;
 
         [Header("Aspecto")]
         [SerializeField] private float width = 0.005f;
         // Nombres nuevos a propósito: los viejos ('idle'/'hover') quedaron serializados en la escena
-        // con el alfa de cuando el rayo se veía siempre y hacía falta que fuera tenue. Ahora sólo
-        // aparece sobre un botón, así que tiene que verse fuerte — y renombrar el campo es la forma
+        // con el alfa de cuando el rayo tenía que ser tenue. Ahora se usa para apuntar a propósito
+        // (menús, o sobre un botón), así que tiene que verse fuerte — y renombrar el campo es la forma
         // de que la escena tome el valor nuevo sin editar el YAML a mano.
         [Tooltip("Color del rayo apuntando a un botón, sin disparar todavía.")]
         [SerializeField] private Color aimColor = new Color(0.45f, 0.78f, 1f, 0.9f);
@@ -67,6 +75,8 @@ namespace Extintores
         // (start/endColor); si además se tiñera el material, el alfa se aplicaría dos veces.
         private Material _lineMaterial;
         private Material _dotMaterial;
+        private TrainingSession _session;
+        private bool _waitRelease;
 
         private void Awake()
         {
@@ -83,13 +93,19 @@ namespace Extintores
                 else Debug.LogWarning($"[LaserPointer] Falta la layer '{SprayButton.LayerName}': " +
                                       "el rayo no va a encontrar ningún botón.");
             }
+            _session = FindFirstObjectByType<TrainingSession>();
             BuildVisual();
         }
 
-        private void OnEnable() => ActiveCount++;
+        private void OnEnable()
+        {
+            ActiveCount++;
+            SprayButton.AnyPressed += OnAnyPressed;
+        }
 
         private void OnDisable()
         {
+            SprayButton.AnyPressed -= OnAnyPressed;
             ActiveCount = Mathf.Max(0, ActiveCount - 1);
             SetTarget(null);
             Hide();
@@ -136,9 +152,16 @@ namespace Extintores
             Vector3 dir = origin.forward;
             Vector3 end = from + dir * maxDistance;
 
+            bool firing = spray != null && spray.IsSpraying;
+            if (!firing) _waitRelease = false;
+
             SprayButton found = null;
-            if (Physics.Raycast(from, dir, out RaycastHit hit, maxDistance, hits,
-                                QueryTriggerInteraction.Ignore))
+            // Collide y no Ignore: el fondo del panel de extintores es un collider TRIGGER (así el
+            // chorro lo atraviesa y sigue llegando al fuego) y el rayo tiene que verse sobre todo el
+            // tablero, no sólo encima de un botón.
+            bool aimingAtSomething = Physics.Raycast(from, dir, out RaycastHit hit, maxDistance, hits,
+                                                     QueryTriggerInteraction.Collide);
+            if (aimingAtSomething)
             {
                 end = hit.point;
                 var button = hit.collider.GetComponentInParent<SprayButton>();
@@ -146,17 +169,35 @@ namespace Extintores
             }
 
             SetTarget(found);
-            if (Target == null) { Hide(); return; }
+            if (Target == null)
+            {
+                if (MenuContext || aimingAtSomething) Draw(from, end, false, dot: false);
+                else Hide();
+                return;
+            }
 
             // El rayo señala; el grip del extintor es el que acciona. Hold() llena la barra, así que
-            // hay que sostener el disparo ~fillSeconds sobre el botón.
-            bool firing = spray != null && spray.IsSpraying;
-            if (firing) Target.Hold();
+            // hay que sostener el disparo ~fillSeconds sobre el botón — y, si se acaba de accionar
+            // otro, soltar primero.
+            bool charging = firing && !_waitRelease;
+            if (charging) Target.Hold();
 
-            Draw(from, end, firing);
+            Draw(from, end, charging, dot: true);
         }
 
-        private void Draw(Vector3 from, Vector3 end, bool firing)
+        /// <summary>
+        /// Hay menú y no fuego: fuera de sesión (lobby) o con el fuego apagado esperando "Continuar".
+        /// Sin <see cref="TrainingSession"/> (escena sandbox) se comporta como con fuego.
+        /// </summary>
+        private bool MenuContext =>
+            _session != null && (!_session.InSession || _session.AwaitingContinue);
+
+        private void OnAnyPressed(SprayButton _)
+        {
+            if (spray != null && spray.IsSpraying) _waitRelease = true;
+        }
+
+        private void Draw(Vector3 from, Vector3 end, bool firing, bool dot)
         {
             var c = firing ? firingColor : aimColor;
 
@@ -167,7 +208,7 @@ namespace Extintores
             _line.endColor = c;
 
             _dot.position = end;
-            _dotRend.enabled = true;
+            _dotRend.enabled = dot;
             if (_dotMaterial != null) _dotMaterial.color = c;
         }
 

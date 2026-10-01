@@ -77,6 +77,13 @@ namespace Extintores
         /// <summary>Se dispara al accionarse el botón.</summary>
         public event Action<SprayButton> Pressed;
 
+        /// <summary>
+        /// Se dispara al accionarse CUALQUIER botón. <see cref="LaserPointer"/> lo usa para exigir que
+        /// se suelte el gatillo antes de cargar otro: sin eso, el botón que aparece bajo el rayo al
+        /// cambiar de menú (VOLVER justo debajo de PERSONALIZADO) se accionaba solo.
+        /// </summary>
+        public static event Action<SprayButton> AnyPressed;
+
         /// <summary>Si es false el botón se ve gris e ignora el chorro.</summary>
         public bool Interactable
         {
@@ -86,6 +93,17 @@ namespace Extintores
                 _interactable = value;
                 if (!value) { _charge = 0f; _lastHitTime = float.NegativeInfinity; }
                 UpdateVisual();
+            }
+        }
+
+        /// <summary>Rótulo del botón. Se puede cambiar en runtime (p. ej. "VIBRACIÓN: SÍ/NO").</summary>
+        public string Text
+        {
+            get => text;
+            set
+            {
+                text = value;
+                if (_textMesh != null) _textMesh.text = value;
             }
         }
 
@@ -162,6 +180,7 @@ namespace Extintores
                 var face = CreateQuadChild("Face", -0.008f);
                 _faceRend = face.GetComponent<Renderer>();
                 _faceRend.sharedMaterial = NewUnlitMaterial(label);
+                _faceRend.sortingOrder = SortingOrder + 1;
             }
             else
             {
@@ -181,11 +200,13 @@ namespace Extintores
             var tm = go.AddComponent<TextMesh>(); // agrega MeshRenderer por RequireComponent
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
                        ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var textRend = go.GetComponent<MeshRenderer>();
             if (font != null)
             {
                 tm.font = font;
-                go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+                textRend.sharedMaterial = font.material;
             }
+            textRend.sortingOrder = SortingOrder + 1; // por delante de la placa y del fondo
 
             tm.text = text;
             tm.fontSize = 90;
@@ -198,6 +219,19 @@ namespace Extintores
             _faceRend = go.GetComponent<MeshRenderer>();
         }
 
+        /// <summary>
+        /// Orden de dibujo de las piezas del botón, <b>por renderer</b>.
+        ///
+        /// ⚠ El fondo del panel de extintores es translúcido y cae en la misma cola (3000) que las
+        /// placas y los rótulos (Sprites/Default y la fuente del TextMesh). Dentro de una cola URP
+        /// ordena por distancia a la cámara: con el panel de costado, los botones del lado lejano se
+        /// dibujaban ANTES que el fondo y quedaban velados —unos grises, otros no—. Subir la
+        /// <c>renderQueue</c> del material del fondo no sirve: URP la reescribe a 3000 cada vez que
+        /// valida el material. <see cref="Renderer.sortingOrder"/> vive en el renderer, no en el
+        /// material, así que no lo pisa nadie y manda sobre la distancia.
+        /// </summary>
+        private const int SortingOrder = 10;
+
         private Transform CreateQuadChild(string name, float zOffset)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -208,7 +242,9 @@ namespace Extintores
 
             // Unlit y doble cara (Sprites/Default tiene Cull Off): se lee bien en VR sin depender
             // de que haya una luz apuntándole, y no se pierde si el botón queda de espaldas.
-            go.GetComponent<MeshRenderer>().sharedMaterial = NewUnlitMaterial(null);
+            var mr = go.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = NewUnlitMaterial(null);
+            mr.sortingOrder = SortingOrder; // siempre por delante del fondo translúcido del panel
 
             var t = go.transform;
             t.SetParent(transform, false);
@@ -315,6 +351,7 @@ namespace Extintores
             }
 
             Debug.Log($"[SprayButton] '{name}' accionado.");
+            AnyPressed?.Invoke(this); // antes que los handlers: pueden cambiar de menú
             onPressed?.Invoke();
             Pressed?.Invoke(this);
         }

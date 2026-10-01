@@ -30,6 +30,12 @@ namespace Extintores
         /// <summary>Visibilidad global de todos los badges (modo entrenamiento on/off).</summary>
         public static bool GloballyVisible = true;
 
+        /// <summary>
+        /// Lo prende <see cref="TrainingSession"/> en modo Aleatorio: ahí la letra ES la respuesta.
+        /// Va aparte de <see cref="GloballyVisible"/> para que el toggle del mando no la pueda revelar.
+        /// </summary>
+        public static bool SuppressedByMode;
+
         private FireSource _fire;
         private Transform _quad;
         private Renderer _rend;
@@ -62,7 +68,7 @@ namespace Extintores
         {
             if (_quad == null || _rend == null) return;
 
-            bool show = GloballyVisible && _fire != null && !_fire.IsExtinguished;
+            bool show = GloballyVisible && !SuppressedByMode && _fire != null && !_fire.IsExtinguished;
             if (_rend.enabled != show) _rend.enabled = show;
             if (!show) return;
 
@@ -71,6 +77,15 @@ namespace Extintores
             if (_cam == null) _cam = Camera.main;
             if (_cam != null)
                 _quad.rotation = Quaternion.LookRotation(_quad.position - _cam.transform.position);
+        }
+
+        /// <summary>
+        /// El quad cuelga del PADRE, así que no se apaga solo cuando se apaga la llama. Sin esto, con
+        /// el puesto en reposo (causa visible, llama apagada) la letra quedaba flotando.
+        /// </summary>
+        private void OnDisable()
+        {
+            if (_rend != null) _rend.enabled = false;
         }
 
         /// <summary>

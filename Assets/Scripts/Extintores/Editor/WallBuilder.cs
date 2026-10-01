@@ -84,15 +84,17 @@ namespace Extintores.EditorTools
             int n = Bays.Length;
             float width = n * Pitch + Margin;
 
-            // Panel de fondo.
+            // Panel de fondo, TRANSLÚCIDO: el panel va adelante-derecha del usuario y un fondo opaco
+            // taparía el fuego. Marcos, etiquetas y botones siguen opacos, que son lo que se lee.
             var board = GameObject.CreatePrimitive(PrimitiveType.Cube);
             board.name = "Backboard";
-            StripCollider(board);
             board.transform.SetParent(root.transform, false);
             board.transform.localScale = new Vector3(width, Height, 0.05f);
             board.transform.localPosition = new Vector3(0f, Height / 2f, 0f);
-            board.GetComponent<MeshRenderer>().sharedMaterial =
-                GetColorMat("Board", new Color(0.85f, 0.85f, 0.85f));
+            var boardRend = board.GetComponent<MeshRenderer>();
+            boardRend.sharedMaterial = GetBoardMat();
+            boardRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            AddBoardCollider(board);
 
             // El eje X del panel corre al revés que el del usuario (mira desde −Z), así que las
             // bahías se dibujan de derecha a izquierda para que el orden Agua→K se lea normal.
@@ -205,6 +207,25 @@ namespace Extintores.EditorTools
             return b;
         }
 
+        /// <summary>
+        /// Collider del fondo, para que el láser se vea <b>en todo el tablero</b> y no sólo sobre un
+        /// botón: apuntar al panel ya es apuntar a algo.
+        ///
+        /// Va como <b>trigger</b> a propósito: el módulo de colisión de partículas ignora los
+        /// triggers, así que el chorro lo atraviesa y sigue llegando al fuego que está detrás. El
+        /// láser sí lo ve porque hace el raycast con <c>QueryTriggerInteraction.Collide</c>.
+        /// </summary>
+        internal static void AddBoardCollider(GameObject board)
+        {
+            var box = board.GetComponent<BoxCollider>();
+            if (box == null) box = board.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.size = Vector3.one; // el Cube ya está escalado al tamaño del panel
+
+            int layer = LayerMask.NameToLayer(SprayButton.LayerName);
+            if (layer >= 0) board.layer = layer;
+        }
+
         private static void StripCollider(GameObject go)
         {
             var c = go.GetComponent<Collider>();
@@ -225,6 +246,48 @@ namespace Extintores.EditorTools
             EditorUtility.SetDirty(mat);
             return mat;
         }
+
+        internal const string BoardMatPath = MatFolder + "/M_Wall_BoardTranslucent.mat";
+        private static readonly Color BoardColor = new Color(0.80f, 0.82f, 0.85f, 0.28f);
+
+        /// <summary>
+        /// Material del fondo del panel: URP/Lit en modo Transparent (alpha blend, sin ZWrite).
+        /// Lo reusa <c>SceneWiringFixer</c> para pasar el panel ya generado sin rehacerlo.
+        /// </summary>
+        internal static Material GetBoardMat()
+        {
+            EnsureFolder(MatFolder);
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(BoardMatPath);
+            bool created = mat == null;
+            if (created) mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+
+            SetColor(mat, BoardColor);
+            mat.SetFloat("_Surface", 1f);   // Transparent
+            mat.SetFloat("_Blend", 0f);     // Alpha
+            mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetFloat("_SrcBlendAlpha", (float)UnityEngine.Rendering.BlendMode.One);
+            mat.SetFloat("_DstBlendAlpha", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetFloat("_ZWrite", 0f);
+            mat.SetFloat("_Smoothness", 0.2f);
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            // ⚠ No tiene sentido bajarle la renderQueue para que se dibuje antes que los botones:
+            // URP la reescribe a 3000 cada vez que valida el material (se probó, y el .mat volvía
+            // solo). El orden contra los botones lo resuelve SprayButton con sortingOrder.
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            mat.SetShaderPassEnabled("ShadowCaster", false); // un vidrio no proyecta sombra sólida
+
+            if (created) AssetDatabase.CreateAsset(mat, BoardMatPath);
+            else EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        /// <summary>¿El material ya es el fondo translúcido?</summary>
+        internal static bool IsTranslucent(Material m) =>
+            m != null && m.HasProperty("_Surface") && m.GetFloat("_Surface") > 0.5f &&
+            m.renderQueue > (int)UnityEngine.Rendering.RenderQueue.GeometryLast;
 
         private static Material GetColorMat(string id, Color color)
         {

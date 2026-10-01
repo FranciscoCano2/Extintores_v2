@@ -71,15 +71,25 @@ namespace Extintores
     /// Matriz de efectividad agente × clase de fuego. Devuelve un MULTIPLICADOR sobre el poder
     /// de apagado de cada partícula del chorro:
     /// <list type="bullet">
-    ///   <item><c>1</c>  = efectivo (apaga a ritmo normal).</item>
-    ///   <item><c>~0</c> = casi inútil (el agente no sirve para esa clase).</item>
+    ///   <item><c>≥ EffectiveThreshold</c> = efectivo: apaga.</item>
+    ///   <item><c>0 .. EffectiveThreshold</c> = no sirve: <b>no apaga nada</b> (y cuenta como
+    ///         extintor equivocado).</item>
     ///   <item><c>&lt;0</c> = CONTRAPRODUCENTE: el extintor equivocado no apaga y AVIVA el fuego
     ///         (p. ej. agua sobre líquidos/eléctrico/cocina). Es el núcleo pedagógico de la fase.</item>
     /// </list>
+    ///
+    /// ⚠ Los valores intermedios (0,2–0,4) antes apagaban "más lento": con el caudal del chorro la
+    /// diferencia no se notaba y el fuego se apagaba con cualquier extintor.
     /// Valores aproximados con fines de entrenamiento; ajustables aquí en un solo lugar.
     /// </summary>
     public static class ExtinguishMatrix
     {
+        /// <summary>
+        /// Efectividad mínima para que un agente apague. Es el mismo criterio del tutorial (qué
+        /// bahías quedan habilitadas) y del verde del panel.
+        /// </summary>
+        public const float EffectiveThreshold = 0.9f;
+
         // Filas = AgentType, Columnas = FireClass (A, B, C, K).
         private static readonly float[,] Table =
         {
@@ -95,6 +105,10 @@ namespace Extintores
         /// <summary>Multiplicador de apagado del <paramref name="agent"/> sobre <paramref name="fire"/>.</summary>
         public static float Effectiveness(AgentType agent, FireClass fire)
             => Table[(int)agent, (int)fire];
+
+        /// <summary>True si el agente apaga ese fuego.</summary>
+        public static bool IsEffective(AgentType agent, FireClass fire)
+            => Effectiveness(agent, fire) >= EffectiveThreshold;
 
         /// <summary>True si el agente empeora ese fuego (multiplicador negativo).</summary>
         public static bool IsCounterproductive(AgentType agent, FireClass fire)

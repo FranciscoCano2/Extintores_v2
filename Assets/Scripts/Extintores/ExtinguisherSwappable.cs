@@ -26,6 +26,10 @@ namespace Extintores
                  "Extinguisher Body Material'): teñir sobre la roja original da negro.")]
         [SerializeField] private bool tintBody = true;
 
+        [Tooltip("Otras piezas que se tiñen con el mismo color que el cuerpo: la boquilla/manguera, " +
+                 "que vive en OTRO rig (la mano izquierda) y por eso no aparece entre los hijos.")]
+        [SerializeField] private Renderer[] extraBodyRenderers;
+
         [Tooltip("Renderer de la etiqueta/calco cuyo mapa se reemplaza según el tipo (opcional).")]
         [SerializeField] private Renderer labelRenderer;
 
@@ -62,12 +66,25 @@ namespace Extintores
             AgentChanged?.Invoke(agent);
         }
 
-        /// <summary>Aspecto del cuerpo según el agente, tomado de la tabla común.</summary>
+        /// <summary>
+        /// Aspecto del cuerpo según el agente, tomado de la tabla común. Se aplica al tanque y a la
+        /// boquilla (<see cref="extraBodyRenderers"/>): son el mismo extintor, así que tienen que
+        /// cambiar juntos.
+        /// </summary>
         public void ApplyBodyColor(AgentType agent)
         {
-            if (!tintBody || bodyRenderer == null) return;
+            if (!tintBody) return;
 
-            var m = bodyRenderer.material; // instancia: no toca el material compartido
+            Tint(bodyRenderer, agent);
+            if (extraBodyRenderers == null) return;
+            foreach (var r in extraBodyRenderers) Tint(r, agent);
+        }
+
+        private static void Tint(Renderer renderer, AgentType agent)
+        {
+            if (renderer == null) return;
+
+            var m = renderer.material; // instancia: no toca el material compartido
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", AgentColor.Of(agent));
             else m.color = AgentColor.Of(agent);
 

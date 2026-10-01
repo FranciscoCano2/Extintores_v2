@@ -144,8 +144,11 @@ namespace Extintores.EditorTools
                 SetRef(so, "panelAnchor", zone.Find("PanelAnchor"));
                 so.ApplyModifiedPropertiesWithoutUndo();
 
+                var lobby = warehouse.Find("Lobby/PlayerSpawn");
+                StationSelectorBuilder.Ensure(station, lobby != null ? lobby.position : warehouse.position, undo: false);
+
                 result.Add(station);
-                log.Add($"Puesto clase {fc} armado en Zone_{fc}.");
+                log.Add($"Puesto clase {fc} armado en Zone_{fc}, con su cartel apuntable.");
             }
 
             return result;
@@ -207,22 +210,12 @@ namespace Extintores.EditorTools
             var random = NewButton(main.transform, "Button_Random", "ALEATORIO", size, Vector3.zero);
             var custom = NewButton(main.transform, "Button_Custom", "PERSONALIZADO", size, new Vector3(0f, -0.26f, 0f));
 
-            // Submenú: una clase por botón, en fila.
+            // Submenú de Personalizado: no hay botón por clase. El usuario apunta al elemento que
+            // quiere apagar (FireStation.Selector); acá sólo va la indicación y "Volver".
             var customPanel = new GameObject("CustomPanel");
             customPanel.transform.SetParent(menuGo.transform, false);
 
-            var classButtons = new SprayButton[4];
-            var classSize = new Vector2(0.24f, 0.24f);
-            int i = 0;
-            foreach (FireClass fc in System.Enum.GetValues(typeof(FireClass)))
-            {
-                // Se dibuja de izquierda a derecha DESDE EL PUNTO DE VISTA DEL USUARIO: como la cara
-                // legible del botón es su −Z, el eje X local corre al revés respecto de quien mira.
-                float x = -(i - 1.5f) * 0.28f;
-                classButtons[i] = NewButton(customPanel.transform, $"Button_Class_{fc}", fc.ToString(),
-                                            classSize, new Vector3(x, 0.16f, 0f));
-                i++;
-            }
+            CreateCustomHint(customPanel.transform);
             var back = NewButton(customPanel.transform, "Button_Back", "VOLVER",
                                  new Vector2(0.4f, 0.16f), new Vector3(0f, -0.16f, 0f));
 
@@ -236,17 +229,40 @@ namespace Extintores.EditorTools
             SetRef(so, "randomButton", random);
             SetRef(so, "customButton", custom);
             SetRef(so, "backButton", back);
-            var arr = so.FindProperty("classButtons");
-            if (arr != null)
-            {
-                arr.arraySize = classButtons.Length;
-                for (int k = 0; k < classButtons.Length; k++)
-                    arr.GetArrayElementAtIndex(k).objectReferenceValue = classButtons[k];
-            }
             so.ApplyModifiedPropertiesWithoutUndo();
 
-            log.Add("Menú del lobby creado: 3 opciones + submenú de 4 clases.");
+            SettingsMenuBuilder.Ensure(menu, undo: false);
+
+            log.Add("Menú del lobby creado: 3 opciones + Configuración + Personalizado apuntando a los elementos.");
             return menu;
+        }
+
+        internal const string CustomHintName = "Hint";
+
+        /// <summary>
+        /// Rótulo del submenú Personalizado. TextMesh suelto (no botón): no se acciona. Cara legible
+        /// −Z, igual que los botones.
+        /// </summary>
+        internal static GameObject CreateCustomHint(Transform customPanel)
+        {
+            var go = new GameObject(CustomHintName);
+            go.transform.SetParent(customPanel, false);
+            go.transform.localPosition = new Vector3(0f, 0.14f, 0f);
+
+            var tm = go.AddComponent<TextMesh>();
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font != null)
+            {
+                tm.font = font;
+                go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            }
+            tm.text = "Apuntá al elemento que\nquerés apagar y dispará";
+            tm.fontSize = 60;
+            tm.characterSize = 0.012f; // ~7 cm por renglón, como el HUD
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.color = Color.white;
+            return go;
         }
 
         private static SprayButton NewButton(Transform parent, string name, string text,
@@ -313,7 +329,6 @@ namespace Extintores.EditorTools
             SetRef(so, "panel", panel);
             SetRef(so, "continueButton", continueButton);
             SetRef(so, "lobbySpawn", warehouse.Find("Lobby/PlayerSpawn"));
-            SetRef(so, "lobbyPanelAnchor", warehouse.Find("Lobby/PanelAnchor"));
 
             var rig = FindOvrRig();
             if (rig != null) SetRef(so, "playerRig", rig);

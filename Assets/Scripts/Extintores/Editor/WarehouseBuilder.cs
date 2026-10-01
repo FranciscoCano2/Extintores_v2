@@ -36,11 +36,28 @@ namespace Extintores.EditorTools
         /// </summary>
         private const float ApproachDistance = 2.2f;
 
-        /// <summary>Altura del pivote del panel de extintores (queda a la altura de la mano).</summary>
-        private const float PanelHeight = 0.85f;
+        /// <summary>
+        /// Altura del pivote (la BASE) del panel de extintores: el panel mide 0,62 m, así que va de
+        /// 1,05 a 1,67 m, cerca de la línea de los ojos. Ya no hace falta que quede a la altura de la
+        /// mano: se elige con el láser.
+        /// </summary>
+        private const float PanelHeight = 1.05f;
 
-        /// <summary>Separación lateral del panel respecto del usuario.</summary>
-        private const float PanelSide = 0.75f;
+        /// <summary>Separación lateral del panel respecto del usuario (a la derecha).</summary>
+        private const float PanelSide = 1.3f;
+
+        /// <summary>
+        /// Cuánto se adelanta el panel. Al costado puro (0) había que girar la cabeza 90° y apuntarle
+        /// de canto; adelante-derecha queda a ~39° de la mirada y a ~2,1 m, se apunta cómodo con el
+        /// láser y, al ser translúcido, no tapa el fuego.
+        /// </summary>
+        private const float PanelForward = 1.6f;
+
+        /// <summary>Dónde queda el lobby: el centro del patio, desde donde se ven los 4 elementos.</summary>
+        internal static readonly Vector3 LobbySpawn = Vector3.zero;
+
+        /// <summary>El menú, respecto del spawn del lobby.</summary>
+        private static readonly Vector3 MenuOffset = new Vector3(0f, 1.45f, 1.8f);
 
         /// <summary>
         /// Cáscara (piso, paredes, techo, columnas) y estanterías de primitivas. Apagado desde que el
@@ -94,8 +111,8 @@ namespace Extintores.EditorTools
             var root = new GameObject("Warehouse_Blockout");
 
             // La escenografía la pone ahora el patio del pack industrial (YardBuilder). Este prefab
-            // queda sólo con los anchors y los Pad de cada zona. Se deja la opción para volver a ver
-            // el blockout sin el pack.
+            // queda sólo con los anchors de cada zona (sin Pad: el piso es el del patio). Se deja la
+            // opción para volver a ver el blockout sin el pack.
             if (IncludeBlockoutGeometry)
             {
                 BuildShell(root.transform);
@@ -192,21 +209,27 @@ namespace Extintores.EditorTools
         // ---------------------------------------------------------------- zonas
 
         /// <summary>
+        /// Pose del panel de extintores para un usuario parado en <paramref name="spawn"/> mirando a
+        /// <paramref name="yaw"/>: <b>adelante a la derecha</b>, orientado hacia él.
+        ///
+        /// La cara legible del panel es su −Z, así que su +Z tiene que apuntar DESDE el usuario HACIA
+        /// el panel: el yaw del usuario + el ángulo al que queda el panel (~37°). Con el yaw del
+        /// usuario a secas el panel quedaría de canto; con +90° —la regla vieja, de cuando iba al
+        /// costado puro— quedaría de espaldas.
+        /// </summary>
+        internal static void PanelPose(Vector3 spawn, float yaw, out Vector3 position, out Quaternion rotation)
+        {
+            var look = Quaternion.Euler(0f, yaw, 0f);
+            position = spawn + look * new Vector3(PanelSide, PanelHeight, PanelForward);
+            float toPanel = Mathf.Atan2(PanelSide, PanelForward) * Mathf.Rad2Deg;
+            rotation = Quaternion.Euler(0f, yaw + toPanel, 0f);
+        }
+
+        /// <summary>
         /// Una zona = anchors puros. <c>FireAnchor</c> es donde el builder de escena instancia el
         /// prefab del fuego; <c>PlayerSpawn</c> y <c>PanelAnchor</c> los consume
         /// <see cref="FireStation"/>.
         /// </summary>
-        /// <summary>
-        /// Orientación del panel de extintores: <b>el yaw del usuario + 90°</b>.
-        ///
-        /// El panel va al COSTADO (a la derecha, <see cref="PanelSide"/>) y su cara legible es el −Z.
-        /// Orientarlo igual que el usuario —como estaba— apunta ese −Z hacia la espalda de quien lo
-        /// usa: había que darse vuelta entero para leerlo. Con +90° el −Z mira hacia el usuario, o
-        /// sea que basta con girar la cabeza a la derecha.
-        /// </summary>
-        private static Quaternion PanelRotation(float approachYaw) =>
-            Quaternion.Euler(0f, approachYaw + 90f, 0f);
-
         private static void BuildZone(Transform parent, Zone z)
         {
             var zone = new GameObject($"Zone_{z.Class}").transform;
@@ -214,7 +237,6 @@ namespace Extintores.EditorTools
 
             var look = Quaternion.Euler(0f, z.ApproachYaw, 0f);
             Vector3 forward = look * Vector3.forward;
-            Vector3 right = look * Vector3.right;
 
             Anchor(zone, "FireAnchor", z.Fire, Quaternion.Euler(0f, z.ApproachYaw + 180f, 0f));
 
@@ -222,13 +244,8 @@ namespace Extintores.EditorTools
             Vector3 spawn = z.Fire - forward * approach;
             Anchor(zone, "PlayerSpawn", spawn, look);
 
-            Anchor(zone, "PanelAnchor",
-                spawn + right * PanelSide + Vector3.up * PanelHeight,
-                PanelRotation(z.ApproachYaw));
-
-            // Marca visual en el piso para ver el puesto desde lejos.
-            var pad = GetMat($"Pad_{z.Class}", ClassColor(z.Class));
-            Box(zone, "Pad", z.Fire + Vector3.up * 0.01f, new Vector3(3.2f, 0.02f, 3.2f), pad);
+            PanelPose(spawn, z.ApproachYaw, out var panelPos, out var panelRot);
+            Anchor(zone, "PanelAnchor", panelPos, panelRot);
         }
 
         private static void BuildLobby(Transform parent)
@@ -236,28 +253,18 @@ namespace Extintores.EditorTools
             var lobby = new GameObject("Lobby").transform;
             lobby.SetParent(parent, false);
 
-            // Mirando a +Z, con el menú al frente.
+            // En el centro del patio y mirando a +Z, con el menú al frente. Desde acá se ven los 4
+            // elementos, que en Personalizado se eligen apuntándoles.
             var look = Quaternion.identity;
-            Vector3 spawn = new Vector3(0f, 0f, -5.5f);
+            Vector3 spawn = LobbySpawn;
 
             // El menú está AL FRENTE, así que se orienta igual que el usuario (su cara legible −Z
-            // le queda de cara). El panel está AL COSTADO y por eso va a 90° — ver PanelRotation.
+            // le queda de cara). El panel va adelante-derecha — ver PanelPose.
             Anchor(lobby, "PlayerSpawn", spawn, look);
-            Anchor(lobby, "MenuAnchor", spawn + new Vector3(0f, 1.45f, 1.8f), look);
-            Anchor(lobby, "PanelAnchor", spawn + new Vector3(PanelSide, PanelHeight, 0f),
-                   PanelRotation(look.eulerAngles.y));
-
-            var pad = GetMat("Pad_Lobby", new Color(0.25f, 0.45f, 0.70f));
-            Box(lobby, "Pad", spawn + Vector3.up * 0.01f, new Vector3(2.4f, 0.02f, 2.4f), pad);
+            Anchor(lobby, "MenuAnchor", spawn + MenuOffset, look);
+            PanelPose(spawn, look.eulerAngles.y, out var panelPos, out var panelRot);
+            Anchor(lobby, "PanelAnchor", panelPos, panelRot);
         }
-
-        private static Color ClassColor(FireClass c) => c switch
-        {
-            FireClass.A => new Color(0.20f, 0.50f, 0.25f),
-            FireClass.B => new Color(0.65f, 0.45f, 0.15f),
-            FireClass.C => new Color(0.20f, 0.35f, 0.65f),
-            _ => new Color(0.55f, 0.25f, 0.45f),
-        };
 
         // ---------------------------------------------------------------- helpers
 

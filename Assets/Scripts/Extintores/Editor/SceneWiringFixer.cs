@@ -51,10 +51,27 @@ namespace Extintores.EditorTools
         private static void Fixed(string m) { Log.Add($"  FIX   · {m}"); }
         private static void Problem(string m) { Log.Add($"  ✗     · {m}"); _problems++; }
 
+        private const string TrainingScenePath = "Assets/Scenes/Training.unity";
+
         private static void Run(bool apply)
         {
             Log.Clear();
             _problems = 0;
+
+            // Unity a veces arranca con una escena "Untitled" vacía en vez de la última abierta. Reparar
+            // ESA escena llena de objetos una escena que nadie usa, y la de verdad queda igual.
+            var active = SceneManager.GetActiveScene();
+            if (active.path != TrainingScenePath)
+            {
+                string which = string.IsNullOrEmpty(active.path) ? "una escena sin guardar (Untitled)" : $"'{active.path}'";
+                if (apply)
+                {
+                    Debug.LogError($"[SceneWiringFixer] La escena abierta es {which}, no '{TrainingScenePath}'. " +
+                                   "No se modificó nada: abrí Training.unity (Project ▸ Assets/Scenes) y volvé a correrlo.");
+                    return;
+                }
+                Problem($"La escena abierta es {which}, no '{TrainingScenePath}': este diagnóstico no es el del juego.");
+            }
 
             int group = 0;
             if (apply)
@@ -84,10 +101,16 @@ namespace Extintores.EditorTools
             FixSwappableWiring(apply, swappable, spray);
             FixLaser(apply, spray);
             FixStationPrefab(apply, station);
+            FixBoardTranslucency(apply);
             FixBayLabels(apply);
+            FixPads(apply);
+            FixLobby(apply);
             FixPanelAnchors(apply);
             FixYard(apply);
             FixHud(apply, training);
+            FixStationSelectors(apply);
+            FixCustomMenu(apply);
+            FixSettingsMenu(apply);
             CheckFires(spray);
             CheckTrainingSetup();
 
@@ -403,6 +426,7 @@ namespace Extintores.EditorTools
                     Problem("ExtinguisherSwappable.tintBody está apagado: sólo cambiaría la etiqueta.");
 
                 FixBodyMaterial(false, sw);
+                FixNozzleTint(false, sw, spray);
                 return;
             }
 
@@ -418,6 +442,81 @@ namespace Extintores.EditorTools
             else Ok("ExtinguisherSwappable ya estaba cableado.");
 
             FixBodyMaterial(true, sw);
+            FixNozzleTint(true, sw, spray);
+        }
+
+        /// <summary>
+        /// La boquilla es parte del mismo extintor, así que se pinta del color del agente igual que
+        /// el tanque. Vive en OTRO rig (la mano izquierda), por eso hay que cablearla a mano en
+        /// <c>extraBodyRenderers</c>; y necesita el mismo material tintable (con la textura
+        /// desaturada), porque sobre la textura roja del pack cualquier tinte da negro.
+        /// </summary>
+        private static void FixNozzleTint(bool apply, ExtinguisherSwappable sw, ExtinguisherSpray spray)
+        {
+            if (sw == null || spray == null) return;
+
+            // El rig de la boquilla: el ExtinguisherMount del que cuelga el chorro (NozzleRig). NO se
+            // usa transform.root: si mañana la boquilla cuelga del OVRCameraRig, barrería el rig
+            // entero (mandos, manos y el propio tanque).
+            var mount = spray.GetComponentInParent<ExtinguisherMount>();
+            var nozzleRoot = mount != null ? mount.transform : spray.transform;
+            var pieces = new List<Renderer>();
+            foreach (var r in nozzleRoot.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r is ParticleSystemRenderer || r is LineRenderer) continue;
+                if (r.GetComponentInParent<ExtinguisherSwappable>() != null) continue; // el tanque ya se tiñe
+                pieces.Add(r);
+            }
+
+            if (pieces.Count == 0)
+            {
+                Ok("(aviso) La boquilla no tiene piezas visibles que teñir.");
+                return;
+            }
+
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(ExtinguisherBodyTool.BodyMaterial);
+            var so = new SerializedObject(sw);
+            var arr = so.FindProperty("extraBodyRenderers");
+            bool wired = arr != null && arr.arraySize == pieces.Count;
+            if (wired)
+                for (int i = 0; i < pieces.Count && wired; i++)
+                    wired = arr.GetArrayElementAtIndex(i).objectReferenceValue == pieces[i];
+
+            bool material = mat != null;
+            foreach (var r in pieces) if (r.sharedMaterial != mat) material = false;
+
+            if (wired && material) { Ok($"La boquilla ({pieces.Count} pieza(s)) se tiñe con el tanque."); return; }
+
+            if (!apply)
+            {
+                if (!wired)
+                    Problem("La boquilla no está cableada en ExtinguisherSwappable.extraBodyRenderers: " +
+                            "no cambia de color con el extintor.");
+                if (mat == null)
+                    Problem($"Falta '{ExtinguisherBodyTool.BodyMaterial}' para teñir la boquilla.");
+                else if (!material)
+                    Problem("La boquilla no usa el material tintable: con la textura roja del pack, " +
+                            "cualquier tinte sale negro.");
+                return;
+            }
+
+            if (mat != null)
+                foreach (var r in pieces)
+                {
+                    if (r.sharedMaterial == mat) continue;
+                    Undo.RecordObject(r, "Material de la boquilla");
+                    r.sharedMaterial = mat;
+                    EditorUtility.SetDirty(r);
+                }
+
+            if (arr != null)
+            {
+                arr.arraySize = pieces.Count;
+                for (int i = 0; i < pieces.Count; i++)
+                    arr.GetArrayElementAtIndex(i).objectReferenceValue = pieces[i];
+                so.ApplyModifiedProperties();
+            }
+            Fixed($"Boquilla ({pieces.Count} pieza(s)) cableada al tinte del extintor.");
         }
 
         /// <summary>
@@ -484,7 +583,12 @@ namespace Extintores.EditorTools
         private static void FixLaser(bool apply, ExtinguisherSpray spray)
         {
             var laser = Object.FindFirstObjectByType<LaserPointer>(FindObjectsInactive.Include);
-            if (laser != null) { Ok($"Puntero láser en '{Path(laser.transform)}'."); return; }
+            if (laser != null)
+            {
+                Ok($"Puntero láser en '{Path(laser.transform)}'.");
+                FixLaserReach(apply, laser);
+                return;
+            }
 
             if (spray == null)
             {
@@ -503,13 +607,36 @@ namespace Extintores.EditorTools
             Fixed($"LaserPointer agregado a '{Path(spray.transform)}' (la punta de la boquilla).");
         }
 
+        /// <summary>
+        /// El rayo tiene que llegar desde el centro del patio a los elementos de Personalizado
+        /// (~8,7 m). El valor viejo (8 m) quedó serializado en la escena, así que cambiar el default
+        /// del código no alcanza.
+        /// </summary>
+        private static void FixLaserReach(bool apply, LaserPointer laser)
+        {
+            var so = new SerializedObject(laser);
+            var p = so.FindProperty("maxDistance");
+            if (p == null) { Problem("LaserPointer no tiene 'maxDistance': no puedo revisar su alcance."); return; }
+            if (p.floatValue >= LaserPointer.MinReach) { Ok($"El láser llega a {p.floatValue:0.#} m."); return; }
+
+            if (!apply)
+            {
+                Problem($"El láser llega sólo a {p.floatValue:0.#} m: desde el centro del patio no alcanza " +
+                        "los elementos de Personalizado (~8,7 m).");
+                return;
+            }
+            p.floatValue = LaserPointer.MinReach;
+            so.ApplyModifiedProperties();
+            Fixed($"Alcance del láser subido a {LaserPointer.MinReach} m.");
+        }
+
         // ------------------------------------------------------------------ anchors del panel
         /// <summary>
         /// Repara los anchors de cada zona del galpón, sin rehacerlo:
         /// <list type="bullet">
-        ///   <item><b>Giro del panel</b>: 90° respecto del <c>PlayerSpawn</c> hermano. El panel va al
-        ///         costado y su cara legible es el −Z; orientado igual que el usuario, ese −Z apunta
-        ///         a su espalda y hay que darse vuelta entero para leerlo.</item>
+        ///   <item><b>Pose del panel</b>: adelante-derecha del <c>PlayerSpawn</c> hermano y girado
+        ///         hacia él (<see cref="WarehouseBuilder.PanelPose"/>). Reemplaza la regla vieja de
+        ///         90° al costado puro, que obligaba a apuntarle de canto.</item>
         ///   <item><b>Distancia de aproximación</b>: cuánto se separa el <c>PlayerSpawn</c> del
         ///         fuego. En clase B la causa es un auto de ~4,5 m y el usuario aparecía encima del
         ///         paragolpes.</item>
@@ -532,21 +659,21 @@ namespace Extintores.EditorTools
             int turns = 0, moves = 0;
             foreach (var zone in Zones(asset.transform))
             {
-                if (NeedsTurn(zone, out _)) turns++;
+                if (NeedsPanelPose(zone, out _, out _)) turns++;
                 if (NeedsMove(zone, out _, out _)) moves++;
             }
 
             if (turns == 0 && moves == 0)
             {
-                Ok("Los anchors del galpón están bien: panel de cara al usuario y distancias correctas.");
+                Ok("Los anchors del galpón están bien: panel adelante-derecha y distancias correctas.");
                 return;
             }
 
             if (!apply)
             {
                 if (turns > 0)
-                    Problem($"{turns} zona(s) con el PanelAnchor orientado igual que el usuario: el " +
-                            "panel queda de costado mirando hacia atrás y hay que darse vuelta para usarlo.");
+                    Problem($"{turns} zona(s) con el PanelAnchor fuera de lugar: el panel tiene que ir " +
+                            "adelante a la derecha del usuario y girado hacia él.");
                 if (moves > 0)
                     Problem($"{moves} zona(s) con el PlayerSpawn a una distancia del fuego distinta " +
                             "de la que define WarehouseBuilder (clase B aparecía encima del auto).");
@@ -559,13 +686,12 @@ namespace Extintores.EditorTools
                 int t = 0, m = 0;
                 foreach (var zone in Zones(contents.transform))
                 {
-                    // Primero mover y después girar: el giro se calcula contra el spawn, que la
-                    // mudanza no rota, así que el orden no cambia el resultado — pero sí importa
-                    // que el panel se mueva junto con el spawn (ver MoveZone).
+                    // Primero mover el spawn y después ubicar el panel: la pose del panel se calcula
+                    // contra el spawn ya reubicado.
                     if (NeedsMove(zone, out float target, out Vector3 delta)) { MoveZone(zone, delta); m++; }
-                    if (NeedsTurn(zone, out float spawnYaw))
+                    if (NeedsPanelPose(zone, out var panelPos, out var panelRot))
                     {
-                        zone.Panel.localRotation = Quaternion.Euler(0f, spawnYaw + 90f, 0f);
+                        zone.Panel.SetLocalPositionAndRotation(panelPos, panelRot);
                         t++;
                     }
                 }
@@ -573,7 +699,7 @@ namespace Extintores.EditorTools
                 if (t > 0 || m > 0)
                 {
                     PrefabUtility.SaveAsPrefabAsset(contents, WarehousePrefabPath);
-                    if (t > 0) Fixed($"{t} PanelAnchor girados 90° en '{WarehousePrefabPath}'.");
+                    if (t > 0) Fixed($"{t} PanelAnchor llevados adelante-derecha en '{WarehousePrefabPath}'.");
                     if (m > 0) Fixed($"{m} PlayerSpawn (y su panel) reubicados a la distancia correcta del fuego.");
                 }
             }
@@ -643,15 +769,243 @@ namespace Extintores.EditorTools
         }
 
         /// <summary>
-        /// Un PanelAnchor está mal si mira casi igual que el PlayerSpawn. Se compara contra el spawn
-        /// —y no contra un yaw fijo— para que sirva en las 4 zonas, que se enfrentan en direcciones
-        /// distintas. Idempotente: a 90° ya no toca nada.
+        /// Un PanelAnchor está mal si no coincide con <see cref="WarehouseBuilder.PanelPose"/> para su
+        /// spawn hermano. Se calcula contra el spawn —y no con valores fijos— para que sirva en las 4
+        /// zonas y en el lobby. Todo en espacio local del grupo. Idempotente.
         /// </summary>
-        private static bool NeedsTurn(ZoneAnchors zone, out float spawnYaw)
+        private static bool NeedsPanelPose(ZoneAnchors zone, out Vector3 position, out Quaternion rotation)
         {
-            spawnYaw = zone.Spawn.localRotation.eulerAngles.y;
-            float delta = Mathf.DeltaAngle(zone.Panel.localRotation.eulerAngles.y, spawnYaw);
-            return Mathf.Abs(delta) < 45f;
+            float spawnYaw = zone.Spawn.localRotation.eulerAngles.y;
+            WarehouseBuilder.PanelPose(zone.Spawn.localPosition, spawnYaw, out position, out rotation);
+            bool moved = (zone.Panel.localPosition - position).sqrMagnitude > 0.02f * 0.02f;
+            bool turned = Quaternion.Angle(zone.Panel.localRotation, rotation) > 2f;
+            return moved || turned;
+        }
+
+        // ------------------------------------------------------------------ pads y lobby
+        private const string PadName = "Pad";
+
+        /// <summary>
+        /// Saca los Pad de color debajo de cada puesto: el piso es el del patio. Nada los referencia,
+        /// así que se borran del asset sin riesgo para los fileID de los anchors.
+        /// </summary>
+        private static void FixPads(bool apply)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(WarehousePrefabPath);
+            if (asset == null) return; // FixPanelAnchors ya lo avisa
+
+            int count = 0;
+            foreach (var t in asset.GetComponentsInChildren<Transform>(true))
+                if (t.name == PadName) count++;
+
+            if (count == 0) { Ok("Sin Pad de color en los puestos: queda el piso del patio."); return; }
+            if (!apply)
+            {
+                Problem($"{count} Pad de color todavía debajo de los puestos/lobby en '{WarehousePrefabPath}'.");
+                return;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(WarehousePrefabPath);
+            try
+            {
+                var pads = new List<GameObject>();
+                foreach (var t in contents.GetComponentsInChildren<Transform>(true))
+                    if (t.name == PadName) pads.Add(t.gameObject);
+                foreach (var go in pads) Object.DestroyImmediate(go);
+                PrefabUtility.SaveAsPrefabAsset(contents, WarehousePrefabPath);
+                Fixed($"{pads.Count} Pad borrados de '{WarehousePrefabPath}'.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        /// <summary>
+        /// Lleva el lobby al centro del patio (<see cref="WarehouseBuilder.LobbySpawn"/>): mueve
+        /// PlayerSpawn, MenuAnchor y PanelAnchor del asset con el mismo vector, y después el menú de
+        /// la escena, que se colocó por posición al construirla y no cuelga del anchor.
+        /// </summary>
+        private static void FixLobby(bool apply)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(WarehousePrefabPath);
+            if (asset == null) return;
+
+            var spawn = asset.transform.Find("Lobby/PlayerSpawn");
+            if (spawn == null) { Problem("El galpón no tiene 'Lobby/PlayerSpawn'."); return; }
+
+            Vector3 delta = WarehouseBuilder.LobbySpawn - spawn.localPosition;
+            delta.y = 0f;
+            if (delta.sqrMagnitude < 0.01f * 0.01f)
+            {
+                Ok("El lobby está en el centro del patio.");
+            }
+            else if (!apply)
+            {
+                Problem($"El lobby está en {spawn.localPosition}, no en el centro del patio: desde ahí no " +
+                        "se eligen cómodos los elementos de Personalizado.");
+            }
+            else
+            {
+                var contents = PrefabUtility.LoadPrefabContents(WarehousePrefabPath);
+                try
+                {
+                    var lobby = contents.transform.Find("Lobby");
+                    foreach (Transform child in lobby) child.localPosition += delta;
+                    PrefabUtility.SaveAsPrefabAsset(contents, WarehousePrefabPath);
+                    Fixed($"Lobby corrido {delta} al centro del patio (spawn, menú y panel).");
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(contents);
+                }
+                asset = AssetDatabase.LoadAssetAtPath<GameObject>(WarehousePrefabPath);
+            }
+
+            FixMenuPlacement(apply, asset);
+        }
+
+        /// <summary>
+        /// El menú de la escena tiene que estar en el MenuAnchor del lobby. Se calcula desde el ASSET
+        /// (recién guardado) y la pose de la instancia del galpón, sin esperar a que la instancia se
+        /// refresque.
+        /// </summary>
+        private static void FixMenuPlacement(bool apply, GameObject warehouseAsset)
+        {
+            var menu = Object.FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include);
+            var warehouse = WarehouseInstance();
+            var anchor = warehouseAsset.transform.Find("Lobby/MenuAnchor");
+            if (menu == null || warehouse == null || anchor == null) return;
+
+            var assetRoot = warehouseAsset.transform;
+            Vector3 pos = warehouse.transform.TransformPoint(assetRoot.InverseTransformPoint(anchor.position));
+            Quaternion rot = warehouse.transform.rotation * (Quaternion.Inverse(assetRoot.rotation) * anchor.rotation);
+
+            bool ok = (menu.transform.position - pos).sqrMagnitude < 0.02f * 0.02f &&
+                      Quaternion.Angle(menu.transform.rotation, rot) < 2f;
+            if (ok) { Ok("El menú está en el MenuAnchor del lobby."); return; }
+
+            if (!apply) { Problem($"El menú '{Path(menu.transform)}' no está en el MenuAnchor del lobby."); return; }
+
+            Undo.RecordObject(menu.transform, "Mover menú al lobby");
+            menu.transform.SetPositionAndRotation(pos, rot);
+            Fixed($"Menú movido al MenuAnchor del lobby ({pos}).");
+        }
+
+        /// <summary>La instancia del galpón en la escena (la que contiene los anchors de los puestos).</summary>
+        private static GameObject WarehouseInstance()
+        {
+            var station = Object.FindFirstObjectByType<FireStation>(FindObjectsInactive.Include);
+            return station != null && station.PanelAnchor != null
+                ? PrefabUtility.GetOutermostPrefabInstanceRoot(station.PanelAnchor)
+                : null;
+        }
+
+        // ------------------------------------------------------------------ Personalizado
+        /// <summary>
+        /// Cada puesto necesita su cartel apuntable para elegirlo desde el centro del patio
+        /// (<see cref="StationSelectorBuilder"/>).
+        /// </summary>
+        private static void FixStationSelectors(bool apply)
+        {
+            var stations = Object.FindObjectsByType<FireStation>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (stations.Length == 0) return; // CheckTrainingSetup lo reporta
+
+            var missing = new List<FireStation>();
+            foreach (var st in stations) if (st.Selector == null) missing.Add(st);
+            if (missing.Count == 0) { Ok($"Los {stations.Length} puestos tienen su cartel apuntable."); return; }
+
+            if (!apply)
+            {
+                Problem($"{missing.Count} puesto(s) sin cartel apuntable: en Personalizado no se pueden " +
+                        "elegir desde el centro del patio.");
+                return;
+            }
+
+            var warehouse = WarehouseInstance();
+            Vector3 lobby = warehouse != null
+                ? warehouse.transform.TransformPoint(WarehouseBuilder.LobbySpawn)
+                : WarehouseBuilder.LobbySpawn;
+            foreach (var st in missing) StationSelectorBuilder.Ensure(st, lobby, undo: true);
+            Fixed($"Cartel apuntable creado en {missing.Count} puesto(s).");
+        }
+
+        /// <summary>
+        /// Botón CONFIGURACIÓN en el menú principal + submenú <see cref="SettingsMenu"/> (volumen,
+        /// vibración, altura del mando sobre el tanque y corrimiento de la boquilla).
+        /// </summary>
+        private static void FixSettingsMenu(bool apply)
+        {
+            var menu = Object.FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include);
+            if (menu == null) return; // CheckTrainingSetup lo reporta
+
+            if (SettingsMenuBuilder.IsComplete(menu, out string missing))
+            {
+                Ok("Configuración: botón en el menú + submenú cableado.");
+                return;
+            }
+
+            if (!apply)
+            {
+                Problem($"Menú de configuración incompleto ({missing}).");
+                return;
+            }
+
+            int n = SettingsMenuBuilder.Ensure(menu, undo: true);
+            if (SettingsMenuBuilder.IsComplete(menu, out missing))
+                Fixed($"Menú de configuración creado y cableado ({n} pieza(s)).");
+            else
+                Problem($"Menú de configuración sigue incompleto ({missing}): revisá '{SettingsMenuBuilder.PanelName}' a mano.");
+        }
+
+        /// <summary>
+        /// Aplica <see cref="FixScene"/> sobre <c>Training.unity</c> y la guarda. Para batchmode, con el
+        /// editor cerrado:
+        /// <c>Unity.exe -batchmode -quit -projectPath … -executeMethod Extintores.EditorTools.SceneWiringFixer.FixTrainingSceneBatch</c>
+        /// </summary>
+        public static void FixTrainingSceneBatch()
+        {
+            var scene = EditorSceneManager.OpenScene(TrainingScenePath, OpenSceneMode.Single);
+            Run(true);
+            if (!EditorSceneManager.SaveScene(scene))
+                Debug.LogError($"[SceneWiringFixer] No se pudo guardar {TrainingScenePath}.");
+            Run(false); // el diagnóstico posterior queda en el log
+        }
+
+        /// <summary>
+        /// El submenú de Personalizado ya no tiene botones por clase: se borran y se agrega la
+        /// indicación de apuntar al elemento.
+        /// </summary>
+        private static void FixCustomMenu(bool apply)
+        {
+            var menu = Object.FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include);
+            if (menu == null) return; // CheckTrainingSetup lo reporta
+
+            var panel = new SerializedObject(menu).FindProperty("customPanel")?.objectReferenceValue as GameObject;
+            if (panel == null) { Problem("MainMenu.customPanel sin asignar."); return; }
+
+            var old = new List<GameObject>();
+            foreach (var t in panel.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith("Button_Class_")) old.Add(t.gameObject);
+            bool hasHint = panel.transform.Find(TrainingSceneBuilder.CustomHintName) != null;
+
+            if (old.Count == 0 && hasHint) { Ok("Personalizado: indicación + Volver, sin botones por clase."); return; }
+
+            if (!apply)
+            {
+                if (old.Count > 0) Problem($"El submenú Personalizado todavía tiene {old.Count} botones por clase.");
+                if (!hasHint) Problem("El submenú Personalizado no tiene la indicación de apuntar al elemento.");
+                return;
+            }
+
+            foreach (var go in old) Undo.DestroyObjectImmediate(go);
+            if (old.Count > 0) Fixed($"{old.Count} botones por clase quitados del submenú Personalizado.");
+            if (!hasHint)
+            {
+                var hint = TrainingSceneBuilder.CreateCustomHint(panel.transform);
+                Undo.RegisterCreatedObjectUndo(hint, "Indicación de Personalizado");
+                Fixed("Indicación 'Apuntá al elemento…' agregada al submenú Personalizado.");
+            }
         }
 
         // ------------------------------------------------------------------ Station
@@ -690,6 +1044,66 @@ namespace Extintores.EditorTools
             {
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+        }
+
+        /// <summary>
+        /// El fondo del panel: translúcido (uno opaco taparía el fuego que está detrás) y con un
+        /// collider-trigger en la layer de los botones, para que el láser se vea apuntando a
+        /// cualquier parte del tablero. Se edita el asset, no se rehace la pared.
+        /// </summary>
+        private static void FixBoardTranslucency(bool apply)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(StationPrefabPath);
+            if (asset == null) return; // FixStationPrefab ya lo reporta
+
+            var board = FindChild(asset.transform, "Backboard");
+            var r = board != null ? board.GetComponent<MeshRenderer>() : null;
+            if (r == null) { Problem("El panel de extintores no tiene 'Backboard'."); return; }
+
+            bool translucent = WallBuilder.IsTranslucent(r.sharedMaterial);
+            bool aimable = BoardIsAimable(board.gameObject);
+
+            if (translucent && aimable)
+            {
+                Ok("El fondo del panel es translúcido y se puede apuntar con el láser.");
+                return;
+            }
+
+            if (!apply)
+            {
+                if (!translucent)
+                    Problem("El fondo del panel de extintores es opaco: tapa el fuego que está detrás.");
+                if (!aimable)
+                    Problem("El fondo del panel no tiene collider apuntable: el láser sólo se ve " +
+                            "encima de un botón, no sobre el tablero.");
+                return;
+            }
+
+            var mat = WallBuilder.GetBoardMat();
+            var contents = PrefabUtility.LoadPrefabContents(StationPrefabPath);
+            try
+            {
+                var cb = FindChild(contents.transform, "Backboard");
+                var rend = cb.GetComponent<MeshRenderer>();
+                rend.sharedMaterial = mat;
+                rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                WallBuilder.AddBoardCollider(cb.gameObject);
+                PrefabUtility.SaveAsPrefabAsset(contents, StationPrefabPath);
+                if (!translucent) Fixed("Fondo del panel de extintores pasado a translúcido.");
+                if (!aimable) Fixed("Fondo del panel apuntable con el láser (collider trigger).");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        /// <summary>Trigger en la layer de los botones: lo ve el láser y lo atraviesa el chorro.</summary>
+        private static bool BoardIsAimable(GameObject board)
+        {
+            var col = board.GetComponent<Collider>();
+            int layer = LayerMask.NameToLayer(SprayButton.LayerName);
+            return col != null && col.isTrigger && layer >= 0 && board.layer == layer;
         }
 
         /// <summary>
@@ -885,10 +1299,7 @@ namespace Extintores.EditorTools
         /// </summary>
         private static void CheckYardClearance(GameObject yard)
         {
-            var station = Object.FindFirstObjectByType<FireStation>(FindObjectsInactive.Include);
-            var warehouse = station != null && station.PanelAnchor != null
-                ? PrefabUtility.GetOutermostPrefabInstanceRoot(station.PanelAnchor)
-                : null;
+            var warehouse = WarehouseInstance();
             if (warehouse == null) { Ok("(aviso) Sin puestos en escena: no hay despejes que revisar."); return; }
 
             var props = new List<Renderer>();
@@ -896,7 +1307,8 @@ namespace Extintores.EditorTools
                 if (r.gameObject.name != YardBuilder.GroundName && !(r is ParticleSystemRenderer)) props.Add(r);
 
             int before = _problems;
-            foreach (var z in Zones(warehouse.transform))
+            var zones = new List<ZoneAnchors>(Zones(warehouse.transform));
+            foreach (var z in zones)
             {
                 foreach (var r in props)
                 {
@@ -919,6 +1331,16 @@ namespace Extintores.EditorTools
                 foreach (var r in props)
                     if (SegmentHits(r.bounds, eye, menu.position, 0.2f, flat: false))
                         Problem($"'{PropName(r, yard)}' tapa el menú del {z.Name}.");
+
+                // Y la de cada elemento: en Personalizado se eligen apuntándoles desde acá.
+                foreach (var other in zones)
+                {
+                    if (other.Fire == null) continue;
+                    var target = other.Fire.position + Vector3.up * 1f;
+                    foreach (var r in props)
+                        if (SegmentHits(r.bounds, eye, target, 0.2f, flat: false))
+                            Problem($"'{PropName(r, yard)}' tapa, desde el {z.Name}, el elemento de {other.Name}.");
+                }
             }
 
             if (_problems == before)

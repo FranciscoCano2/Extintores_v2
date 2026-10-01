@@ -19,9 +19,15 @@ namespace Extintores
         [SerializeField] private Color correctColor = new Color(0.20f, 0.90f, 0.30f);
         [SerializeField] private Color dangerColor = new Color(0.95f, 0.20f, 0.15f);
         [Tooltip("Efectividad mínima para considerar el agente 'correcto' (verde).")]
-        [SerializeField, Range(0f, 1f)] private float correctThreshold = 0.9f;
+        [SerializeField, Range(0f, 1f)] private float correctThreshold = ExtinguishMatrix.EffectiveThreshold;
         [Tooltip("Color de las bahías deshabilitadas (modo tutorial: agentes no efectivos).")]
         [SerializeField] private Color disabledColor = new Color(0.35f, 0.35f, 0.35f);
+
+        /// <summary>
+        /// Lo prende <see cref="TrainingSession"/> en modo Aleatorio: el verde/rojo ES la respuesta,
+        /// así que las bahías quedan con su color propio.
+        /// </summary>
+        public static bool HideAnswers;
 
         private MaterialPropertyBlock _mpb;
         private float _next;
@@ -57,7 +63,7 @@ namespace Extintores
                 else
                 {
                     c = bay.BodyColor;
-                    if (fire != null)
+                    if (fire != null && !HideAnswers)
                     {
                         float eff = fire.EffectivenessOf(bay.Agent);
                         if (eff < 0f) c = dangerColor;

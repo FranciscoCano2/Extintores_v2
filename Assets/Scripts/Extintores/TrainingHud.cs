@@ -27,11 +27,17 @@ namespace Extintores
         [SerializeField] private Color warnColor = new Color(1f, 0.3f, 0.2f);
         [Tooltip("Cuánto se sostiene el cartel de 'nivel superado' antes de esconderse.")]
         [SerializeField] private float successHoldSeconds = 5f;
+        [Tooltip("Cuánto se sostiene el cartel grande de 'extintor equivocado'.")]
+        [SerializeField] private float warnHoldSeconds = 3f;
+        [Tooltip("Escala del cartel chico de la esquina respecto del grande.")]
+        [SerializeField] private float cornerScale = 0.55f;
 
         private float _warnUntil;
         private bool _done;
         private float _doneUntil;
         private Renderer _renderer;
+        private BodyLockedPanel _follower;
+        private Vector3 _baseScale;
 
         private void Awake()
         {
@@ -40,6 +46,8 @@ namespace Extintores
             if (text == null) text = GetComponent<TextMesh>();
             if (text == null) text = CreateText();
             _renderer = GetComponent<Renderer>();
+            _follower = GetComponent<BodyLockedPanel>();
+            _baseScale = transform.localScale;
         }
 
         private void OnEnable()
@@ -58,7 +66,7 @@ namespace Extintores
             training.Started -= OnStarted;
         }
 
-        private void OnWrong() => _warnUntil = Time.time + 1.2f;
+        private void OnWrong() => _warnUntil = Time.time + warnHoldSeconds;
 
         private void OnSuccess()
         {
@@ -86,9 +94,22 @@ namespace Extintores
             bool warn = Time.time < _warnUntil;
             text.color = warn ? warnColor : normalColor;
 
+            // Durante el juego normal el cartel va chico en un rincón de la vista; el aviso de
+            // extintor equivocado y el de nivel superado lo traen grande al frente, como antes.
+            bool big = warn || _done;
+            SetCompact(!big);
+
             if (_done)
             {
                 text.text = $"NIVEL SUPERADO\nTiempo: {training.TimeText}";
+                return;
+            }
+
+            if (!big)
+            {
+                text.text = session != null && session.StageCount > 0
+                    ? $"Nivel {session.StageNumber}/{session.StageCount}\n{training.TimeText}"
+                    : training.TimeText;
                 return;
             }
 
@@ -97,6 +118,14 @@ namespace Extintores
                        $"Agente: {training.CurrentAgent}";
             if (warn) t = "EXTINTOR EQUIVOCADO\n" + t;
             text.text = t;
+        }
+
+        /// <summary>Chico en la esquina de la vista, o grande al frente con zona muerta.</summary>
+        private void SetCompact(bool compact)
+        {
+            if (_follower != null) _follower.Corner = compact;
+            var target = compact ? _baseScale * cornerScale : _baseScale;
+            if (transform.localScale != target) transform.localScale = target;
         }
 
         private TextMesh CreateText()

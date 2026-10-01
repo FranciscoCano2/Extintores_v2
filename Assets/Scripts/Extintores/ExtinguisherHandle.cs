@@ -70,14 +70,14 @@ namespace Extintores
 
         private IEnumerator PulseRoutine(float amplitude, float duration)
         {
-            OVRInput.SetControllerVibration(1f, amplitude, _controllerMask);
+            Haptics.Set(1f, amplitude, _controllerMask);
             yield return new WaitForSeconds(duration);
-            OVRInput.SetControllerVibration(0f, 0f, _controllerMask);
+            Haptics.Stop(_controllerMask);
         }
 
         private void OnDisable()
         {
-            OVRInput.SetControllerVibration(0f, 0f, _controllerMask);
+            Haptics.Stop(_controllerMask);
         }
     }
 }
