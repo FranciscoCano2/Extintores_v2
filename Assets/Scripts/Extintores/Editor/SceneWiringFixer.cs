@@ -973,6 +973,16 @@ namespace Extintores.EditorTools
         }
 
         /// <summary>
+        /// Sólo diagnostica <c>Training.unity</c> (no modifica ni guarda nada). Para batchmode:
+        /// <c>-executeMethod Extintores.EditorTools.SceneWiringFixer.ValidateTrainingSceneBatch</c>
+        /// </summary>
+        public static void ValidateTrainingSceneBatch()
+        {
+            EditorSceneManager.OpenScene(TrainingScenePath, OpenSceneMode.Single);
+            Run(false);
+        }
+
+        /// <summary>
         /// El submenú de Personalizado ya no tiene botones por clase: se borran y se agrega la
         /// indicación de apuntar al elemento.
         /// </summary>
@@ -1564,6 +1574,8 @@ namespace Extintores.EditorTools
                 if (s.PanelAnchor == null) Problem($"El puesto '{s.name}' no tiene PanelAnchor: el panel no se movería.");
             }
 
+            CheckSpawnHeights(session, stations);
+
             var buttons = Object.FindObjectsByType<SprayButton>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             if (buttons.Length == 0) Problem("No hay ningún SprayButton: no se puede navegar el menú.");
             else Ok($"{buttons.Length} botón(es) accionables con el chorro.");
@@ -1585,6 +1597,39 @@ namespace Extintores.EditorTools
                     Problem("FireManager.autoCollectOnStart está encendido: registraría los 4 fuegos " +
                             "y pisaría la etapa que arma TrainingSession. Debe estar apagado.");
             }
+        }
+
+        /// <summary>
+        /// <see cref="TrainingSession"/> apoya el rig en la Y de cada spawn (con origen de piso, el
+        /// origen del rig ES el piso). Un spawn más bajo que el <c>Ground</c> del patio deja al usuario
+        /// hundido; uno más alto, flotando. Sólo diagnostica: los spawns los arma el builder del patio.
+        /// </summary>
+        private static void CheckSpawnHeights(TrainingSession session, FireStation[] stations)
+        {
+            var ground = FindDeep(YardBuilder.GroundName);
+            if (ground == null)
+            {
+                Ok($"(aviso) No encontré '{YardBuilder.GroundName}': no puedo comparar la altura de los spawns.");
+                return;
+            }
+
+            const float tolerance = 0.05f; // m
+            float floorY = ground.position.y;
+            var spawns = new List<Transform>();
+            var lobby = new SerializedObject(session).FindProperty("lobbySpawn");
+            if (lobby != null && lobby.objectReferenceValue is Transform l) spawns.Add(l);
+            foreach (var s in stations) if (s != null) spawns.Add(s.PlayerSpawn);
+
+            int bad = 0;
+            foreach (var t in spawns)
+            {
+                float dy = t.position.y - floorY;
+                if (Mathf.Abs(dy) <= tolerance) continue;
+                bad++;
+                Problem($"'{Path(t)}' está {dy * 100f:+0;-0} cm respecto del piso del patio (y={floorY:0.00}): " +
+                        (dy < 0 ? "el usuario aparecería hundido." : "el usuario aparecería flotando."));
+            }
+            if (bad == 0) Ok($"{spawns.Count} spawn(s) a la altura del piso (y={floorY:0.00}).");
         }
 
         // ------------------------------------------------------------------ helpers
