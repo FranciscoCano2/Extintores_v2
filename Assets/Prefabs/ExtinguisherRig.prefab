@@ -137,6 +137,8 @@ MonoBehaviour:
   trackingSpace: {fileID: 0}
   positionOffset: {x: 0, y: 0, z: 0}
   rotationOffset: {x: 0, y: 0, z: 0}
+  userSlide: 0
+  slideAxis: {x: 0, y: 0, z: 0}
   gripPoint: {fileID: 8404847621982840722}
   nozzleTip: {fileID: 1499570217770296671}
   drawGizmos: 1
