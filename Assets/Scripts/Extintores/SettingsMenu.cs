@@ -4,13 +4,14 @@ namespace Extintores
 {
     /// <summary>
     /// Submenú "Configuración" del lobby. Lee y escribe <see cref="GameSettings"/>, que persiste
-    /// solo; este componente sólo traduce botones a valores. Tres páginas:
+    /// solo; este componente sólo traduce botones a valores. Cuatro páginas:
     /// <list type="bullet">
-    ///   <item><b>General</b>: volumen, vibración y los accesos a las otras dos.</item>
-    ///   <item><b>Extintor</b>: calibración del prop físico — altura de la abrazadera sobre el tanque
-    ///         (su eje Y), desplazamiento transversal X/Z, rotación del tanque en X/Y/Z alrededor de la
-    ///         abrazadera y corrimiento de la boquilla.
-    ///         Se ve al instante en el extintor que el usuario tiene en la mano.</item>
+    ///   <item><b>General</b>: volumen, vibración y los accesos a las otras tres.</item>
+    ///   <item><b>Extintor</b>: calibración del tanque — altura de la abrazadera sobre el tanque
+    ///         (su eje Y), desplazamiento transversal X/Z y rotación en X/Y/Z alrededor de la
+    ///         abrazadera. Se ve al instante en el extintor que el usuario tiene en la mano.</item>
+    ///   <item><b>Boquilla</b>: lo mismo para la boquilla sobre el mando izquierdo — corrimiento
+    ///         sobre su eje (Z, hacia donde sale el chorro), desplazamiento X/Y y rotación X/Y/Z.</item>
     ///   <item><b>Panel</b>: lateral / altura / distancia del panel de extintores. Mientras está
     ///         abierta, <see cref="TrainingSession.PreviewPanel"/> lo muestra en el lobby.</item>
     /// </list>
@@ -20,11 +21,12 @@ namespace Extintores
     /// </summary>
     public class SettingsMenu : MonoBehaviour
     {
-        private enum Page { General, Extinguisher, Panel }
+        private enum Page { General, Extinguisher, Nozzle, Panel }
 
         [Header("Páginas")]
         [SerializeField] private GameObject generalPage;
         [SerializeField] private GameObject extinguisherPage;
+        [SerializeField] private GameObject nozzlePage;
         [SerializeField] private GameObject panelPage;
 
         [Header("General")]
@@ -33,6 +35,7 @@ namespace Extintores
         [SerializeField] private TextMesh volumeLabel;
         [SerializeField] private SprayButton vibrationToggle;
         [SerializeField] private SprayButton extinguisherPageButton;
+        [SerializeField] private SprayButton nozzlePageButton;
         [SerializeField] private SprayButton panelPageButton;
         [SerializeField] private SprayButton resetButton;
 
@@ -55,11 +58,30 @@ namespace Extintores
         [SerializeField] private SprayButton rotZDown;
         [SerializeField] private SprayButton rotZUp;
         [SerializeField] private TextMesh rotZLabel;
+        [SerializeField] private SprayButton extinguisherReset;
+        [SerializeField] private SprayButton extinguisherDone;
+
+        [Header("Boquilla")]
         [SerializeField] private SprayButton nozzleDown;
         [SerializeField] private SprayButton nozzleUp;
         [SerializeField] private TextMesh nozzleLabel;
-        [SerializeField] private SprayButton extinguisherReset;
-        [SerializeField] private SprayButton extinguisherDone;
+        [SerializeField] private SprayButton nozzleShiftXDown;
+        [SerializeField] private SprayButton nozzleShiftXUp;
+        [SerializeField] private TextMesh nozzleShiftXLabel;
+        [SerializeField] private SprayButton nozzleShiftYDown;
+        [SerializeField] private SprayButton nozzleShiftYUp;
+        [SerializeField] private TextMesh nozzleShiftYLabel;
+        [SerializeField] private SprayButton nozzleRotXDown;
+        [SerializeField] private SprayButton nozzleRotXUp;
+        [SerializeField] private TextMesh nozzleRotXLabel;
+        [SerializeField] private SprayButton nozzleRotYDown;
+        [SerializeField] private SprayButton nozzleRotYUp;
+        [SerializeField] private TextMesh nozzleRotYLabel;
+        [SerializeField] private SprayButton nozzleRotZDown;
+        [SerializeField] private SprayButton nozzleRotZUp;
+        [SerializeField] private TextMesh nozzleRotZLabel;
+        [SerializeField] private SprayButton nozzleReset;
+        [SerializeField] private SprayButton nozzleDone;
 
         [Header("Panel de extintores")]
         [SerializeField] private SprayButton panelLeft;
@@ -80,13 +102,17 @@ namespace Extintores
         /// </summary>
         public Object[] RequiredRefs => new Object[]
         {
-            generalPage, extinguisherPage, panelPage,
+            generalPage, extinguisherPage, nozzlePage, panelPage,
             volumeDown, volumeUp, volumeLabel, vibrationToggle,
-            extinguisherPageButton, panelPageButton, resetButton,
+            extinguisherPageButton, nozzlePageButton, panelPageButton, resetButton,
             tankDown, tankUp, tankLabel,
             shiftXDown, shiftXUp, shiftXLabel, shiftZDown, shiftZUp, shiftZLabel,
             rotXDown, rotXUp, rotXLabel, rotYDown, rotYUp, rotYLabel, rotZDown, rotZUp, rotZLabel,
-            nozzleDown, nozzleUp, nozzleLabel, extinguisherReset, extinguisherDone,
+            extinguisherReset, extinguisherDone,
+            nozzleDown, nozzleUp, nozzleLabel,
+            nozzleShiftXDown, nozzleShiftXUp, nozzleShiftXLabel, nozzleShiftYDown, nozzleShiftYUp, nozzleShiftYLabel,
+            nozzleRotXDown, nozzleRotXUp, nozzleRotXLabel, nozzleRotYDown, nozzleRotYUp, nozzleRotYLabel,
+            nozzleRotZDown, nozzleRotZUp, nozzleRotZLabel, nozzleReset, nozzleDone,
             panelLeft, panelRight, panelLateralLabel, panelDown, panelUp, panelHeightLabel,
             panelNearer, panelFarther, panelDistanceLabel, panelReset, panelDone,
         };
@@ -102,6 +128,7 @@ namespace Extintores
             Bind(volumeUp, () => GameSettings.Volume += GameSettings.VolumeStep);
             Bind(vibrationToggle, ToggleVibration);
             Bind(extinguisherPageButton, () => ShowPage(Page.Extinguisher));
+            Bind(nozzlePageButton, () => ShowPage(Page.Nozzle));
             Bind(panelPageButton, () => ShowPage(Page.Panel));
             Bind(resetButton, GameSettings.ResetToDefaults);
 
@@ -119,10 +146,24 @@ namespace Extintores
             Bind(rotYUp, () => GameSettings.TankRotationY += deg);
             Bind(rotZDown, () => GameSettings.TankRotationZ -= deg);
             Bind(rotZUp, () => GameSettings.TankRotationZ += deg);
-            Bind(nozzleDown, () => GameSettings.NozzleOffset -= cm);
-            Bind(nozzleUp, () => GameSettings.NozzleOffset += cm);
             Bind(extinguisherReset, GameSettings.ResetExtinguisher);
             Bind(extinguisherDone, () => ShowPage(Page.General));
+
+            // Boquilla
+            Bind(nozzleDown, () => GameSettings.NozzleOffset -= cm);
+            Bind(nozzleUp, () => GameSettings.NozzleOffset += cm);
+            Bind(nozzleShiftXDown, () => GameSettings.NozzleShiftX -= cm);
+            Bind(nozzleShiftXUp, () => GameSettings.NozzleShiftX += cm);
+            Bind(nozzleShiftYDown, () => GameSettings.NozzleShiftY -= cm);
+            Bind(nozzleShiftYUp, () => GameSettings.NozzleShiftY += cm);
+            Bind(nozzleRotXDown, () => GameSettings.NozzleRotationX -= deg);
+            Bind(nozzleRotXUp, () => GameSettings.NozzleRotationX += deg);
+            Bind(nozzleRotYDown, () => GameSettings.NozzleRotationY -= deg);
+            Bind(nozzleRotYUp, () => GameSettings.NozzleRotationY += deg);
+            Bind(nozzleRotZDown, () => GameSettings.NozzleRotationZ -= deg);
+            Bind(nozzleRotZUp, () => GameSettings.NozzleRotationZ += deg);
+            Bind(nozzleReset, GameSettings.ResetNozzle);
+            Bind(nozzleDone, () => ShowPage(Page.General));
 
             // Panel
             float step = GameSettings.PanelStep;
@@ -153,6 +194,7 @@ namespace Extintores
         {
             if (generalPage != null) generalPage.SetActive(page == Page.General);
             if (extinguisherPage != null) extinguisherPage.SetActive(page == Page.Extinguisher);
+            if (nozzlePage != null) nozzlePage.SetActive(page == Page.Nozzle);
             if (panelPage != null) panelPage.SetActive(page == Page.Panel);
             if (_session != null) _session.PreviewPanel(page == Page.Panel);
         }
@@ -184,7 +226,15 @@ namespace Extintores
             SetText(rotXLabel, $"ROTACIÓN X\n{Signed(r.x, "°")}");
             SetText(rotYLabel, $"ROTACIÓN Y (eje)\n{Signed(r.y, "°")}");
             SetText(rotZLabel, $"ROTACIÓN Z\n{Signed(r.z, "°")}");
-            SetText(nozzleLabel, $"BOQUILLA\n{Signed(GameSettings.NozzleOffset * 100f, "cm")}");
+
+            Vector3 nr = GameSettings.NozzleRotation;
+            Vector3 ns = GameSettings.NozzleShift;
+            SetText(nozzleLabel, $"AVANCE (Z, eje)\n{Signed(GameSettings.NozzleOffset * 100f, "cm")}");
+            SetText(nozzleShiftXLabel, $"DESPLAZAMIENTO X\n{Signed(ns.x * 100f, "cm")}");
+            SetText(nozzleShiftYLabel, $"DESPLAZAMIENTO Y\n{Signed(ns.y * 100f, "cm")}");
+            SetText(nozzleRotXLabel, $"ROTACIÓN X\n{Signed(nr.x, "°")}");
+            SetText(nozzleRotYLabel, $"ROTACIÓN Y\n{Signed(nr.y, "°")}");
+            SetText(nozzleRotZLabel, $"ROTACIÓN Z (eje)\n{Signed(nr.z, "°")}");
 
             Vector3 p = GameSettings.PanelOffset;
             SetText(panelLateralLabel, $"LATERAL\n{Describe(p.x, "a la derecha", "a la izquierda")}");
@@ -199,6 +249,11 @@ namespace Extintores
             Limits(rotYDown, rotYUp, r.y, -GameSettings.RotationMax, GameSettings.RotationMax);
             Limits(rotZDown, rotZUp, r.z, -GameSettings.RotationMax, GameSettings.RotationMax);
             Limits(nozzleDown, nozzleUp, GameSettings.NozzleOffset, GameSettings.NozzleMin, GameSettings.NozzleMax);
+            Limits(nozzleShiftXDown, nozzleShiftXUp, ns.x, -GameSettings.ShiftMax, GameSettings.ShiftMax);
+            Limits(nozzleShiftYDown, nozzleShiftYUp, ns.y, -GameSettings.ShiftMax, GameSettings.ShiftMax);
+            Limits(nozzleRotXDown, nozzleRotXUp, nr.x, -GameSettings.RotationMax, GameSettings.RotationMax);
+            Limits(nozzleRotYDown, nozzleRotYUp, nr.y, -GameSettings.RotationMax, GameSettings.RotationMax);
+            Limits(nozzleRotZDown, nozzleRotZUp, nr.z, -GameSettings.RotationMax, GameSettings.RotationMax);
             Limits(panelLeft, panelRight, p.x, -GameSettings.PanelLateralMax, GameSettings.PanelLateralMax);
             Limits(panelDown, panelUp, p.y, -GameSettings.PanelHeightMax, GameSettings.PanelHeightMax);
             Limits(panelNearer, panelFarther, p.z, -GameSettings.PanelDistanceMax, GameSettings.PanelDistanceMax);

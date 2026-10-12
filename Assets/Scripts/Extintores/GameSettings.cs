@@ -14,8 +14,10 @@ namespace Extintores
     /// <b>Calibración del prop físico.</b> El mando va atado al extintor real con una abrazadera: su
     /// orientación respecto del tanque es FIJA (la da la abrazadera y queda en el
     /// <c>rotationOffset</c> del <see cref="ExtinguisherMount"/>), pero la abrazadera se puede correr
-    /// a lo largo del tanque. Lo único que cambia de un montaje a otro es entonces esa altura, y lo
-    /// mismo para la boquilla sobre el mando izquierdo: un deslizamiento sobre su propio eje.
+    /// a lo largo del tanque. Lo que más cambia de un montaje a otro es entonces esa altura, y lo
+    /// mismo para la boquilla sobre el mando izquierdo: un deslizamiento sobre su propio eje. Encima
+    /// de eso, tanque y boquilla tienen cada uno un desplazamiento transversal y una rotación en los
+    /// tres ejes, para corregir lo que la abrazadera no deja donde el modelo supone.
     /// </summary>
     public static class GameSettings
     {
@@ -35,14 +37,19 @@ namespace Extintores
         // Calibración de fábrica del extintor: la que se midió con el prop real montado (prueba del
         // 01/10/2026). "Restablecer" vuelve acá, y un visor sin preferencias guardadas arranca así.
         public const float DefaultTankHeight = -0.22f;                                   // m
-        public static readonly Vector3 DefaultTankShift = new Vector3(0.02f, 0f, 0.02f); // m
+        // Se midió (2, 0, 2) cm con la composición vieja, donde el desplazamiento giraba con la
+        // rotación Y; es el mismo vector girado 65° sobre Y, para que el tanque quede donde estaba.
+        public static readonly Vector3 DefaultTankShift = new Vector3(0.0266f, 0f, -0.0097f); // m
         public static readonly Vector3 DefaultTankRotation = new Vector3(0f, 65f, 0f);   // grados
         public const float DefaultNozzleOffset = 0f;                                     // m
+        public static readonly Vector3 DefaultNozzleShift = Vector3.zero;                // m
+        public static readonly Vector3 DefaultNozzleRotation = Vector3.zero;             // grados
 
-        // Versión de los defaults. Al subirla, la calibración del extintor guardada con una versión
-        // anterior se descarta UNA vez: si no, un visor que ya tenía prefs (los viejos ceros) nunca
-        // vería los defaults nuevos.
-        private const int SettingsVersion = 2;
+        // Versión de las preferencias. v1 → v2: la calibración del extintor se descarta UNA vez (si
+        // no, un visor que ya tenía prefs —los viejos ceros— nunca vería los defaults nuevos).
+        // v2 → v3: cambió cómo se compone la rotación del tanque (ver SplitTankRotation); la
+        // calibración guardada se convierte para que el tanque no se mueva.
+        private const int SettingsVersion = 3;
         private const string KeyVersion = "cfg.version";
 
         private const string KeyVolume = "cfg.volume";
@@ -54,6 +61,11 @@ namespace Extintores
         private const string KeyRotX = "cfg.tankRotX";
         private const string KeyRotY = "cfg.tankRotY";
         private const string KeyRotZ = "cfg.tankRotZ";
+        private const string KeyNozzleShiftX = "cfg.nozzleShiftX";
+        private const string KeyNozzleShiftY = "cfg.nozzleShiftY";
+        private const string KeyNozzleRotX = "cfg.nozzleRotX";
+        private const string KeyNozzleRotY = "cfg.nozzleRotY";
+        private const string KeyNozzleRotZ = "cfg.nozzleRotZ";
         private const string KeyPanelX = "cfg.panelLateral";
         private const string KeyPanelY = "cfg.panelHeight";
         private const string KeyPanelZ = "cfg.panelDistance";
@@ -69,6 +81,8 @@ namespace Extintores
         private static Vector3 _panel;
         private static Vector3 _tankRotation;
         private static Vector3 _tankShift; // sólo X y Z: el eje largo (Y) es TankControllerHeight
+        private static Vector3 _nozzleRotation;
+        private static Vector3 _nozzleShift; // sólo X e Y: su eje (Z) es NozzleOffset
 
         /// <summary>Volumen general, 0..1. Se aplica sobre <see cref="AudioListener.volume"/>.</summary>
         public static float Volume
@@ -164,9 +178,11 @@ namespace Extintores
         }
 
         /// <summary>
-        /// Rotación del tanque respecto del mando, en grados (euler, ejes locales del tanque: Y es su
-        /// eje largo). Gira ALREDEDOR del punto de agarre —la abrazadera—, que es por donde el tanque
-        /// real está unido al mando. Se suma encima del <c>rotationOffset</c> de fábrica.
+        /// Rotación del tanque respecto del mando, en grados (ejes locales del tanque: Y es su eje
+        /// largo). X y Z lo inclinan alrededor del punto de agarre —la abrazadera—, que es por donde
+        /// el tanque real está unido al mando; Y lo gira sobre su PROPIO eje, ya inclinado. NO es un
+        /// euler de Unity: ver <see cref="SplitTankRotation"/>. Se suma encima del
+        /// <c>rotationOffset</c> de fábrica.
         /// </summary>
         public static Vector3 TankRotation
         {
@@ -191,31 +207,142 @@ namespace Extintores
             set { EnsureLoaded(); SetAxis(ref _tankRotation, 2, value, RotationStep, RotationMax); }
         }
 
+        /// <summary>
+        /// Parte <see cref="TankRotation"/> en la inclinación (X, Z) y el giro sobre el eje largo (Y),
+        /// que <see cref="ExtinguisherMount"/> aplica en ese orden con el desplazamiento en el medio.
+        /// Con <c>Quaternion.Euler(x, y, z)</c> la Y queda POR FUERA de X/Z: con el tanque inclinado,
+        /// tocar Y lo hacía girar alrededor del eje del mando, describiendo un cono.
+        /// </summary>
+        public static void SplitTankRotation(Vector3 r, out Quaternion tilt, out Quaternion spin)
+        {
+            tilt = Quaternion.Euler(r.x, 0f, r.z);
+            spin = Quaternion.AngleAxis(r.y, Vector3.up);
+        }
+
+        /// <summary>
+        /// v2 → v3: convierte la calibración del tanque de la composición vieja (un solo
+        /// <c>Quaternion.Euler</c>, desplazamiento aplicado después del giro) a la nueva, dejando el
+        /// tanque exactamente donde estaba. Sin redondear al paso: el próximo "+"/"−" lo alinea.
+        /// </summary>
+        private static void MigrateTankRotationToV3()
+        {
+            Quaternion old = Quaternion.Euler(_tankRotation);
+
+            // Inclinación: la que lleva el eje largo (+Y) a donde lo dejaba la rotación vieja.
+            // Euler(x, 0, z) · up = (−sen z, cos z · cos x, cos z · sen x).
+            Vector3 axis = old * Vector3.up;
+            float z = Mathf.Asin(Mathf.Clamp(-axis.x, -1f, 1f)) * Mathf.Rad2Deg;
+            float x = Mathf.Atan2(axis.z, axis.y) * Mathf.Rad2Deg;
+            Quaternion tilt = Quaternion.Euler(x, 0f, z);
+
+            // Giro: lo que falta, que por construcción es sólo sobre Y.
+            Vector3 f = (Quaternion.Inverse(tilt) * old) * Vector3.forward;
+            float y = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+
+            // El desplazamiento viejo vivía en el espacio ya girado; el nuevo, en el inclinado.
+            Vector3 shift = Quaternion.AngleAxis(y, Vector3.up) * _tankShift;
+
+            Vector3 before = _tankRotation;
+            _tankRotation = new Vector3(Mathf.Clamp(x, -RotationMax, RotationMax),
+                                        Mathf.Clamp(y, -RotationMax, RotationMax),
+                                        Mathf.Clamp(z, -RotationMax, RotationMax));
+            _tankShift = new Vector3(Mathf.Clamp(shift.x, -ShiftMax, ShiftMax), 0f,
+                                     Mathf.Clamp(shift.z, -ShiftMax, ShiftMax));
+            Debug.Log($"[GameSettings] Rotación del tanque convertida a v3: {before}° → {_tankRotation}°, " +
+                      $"desplazamiento → {_tankShift * 100f} cm.");
+        }
+
+        /// <summary>
+        /// Desplazamiento transversal de la boquilla respecto del mando izquierdo, en metros y en sus
+        /// ejes locales (ya girada): X e Y, perpendiculares a su eje. Z siempre vale 0 — el corrimiento
+        /// a lo largo de la boquilla es <see cref="NozzleOffset"/>. Mismo papel que
+        /// <see cref="TankShift"/> en el tanque.
+        /// </summary>
+        public static Vector3 NozzleShift
+        {
+            get { EnsureLoaded(); return _nozzleShift; }
+        }
+
+        public static float NozzleShiftX
+        {
+            get => NozzleShift.x;
+            set { EnsureLoaded(); SetAxis(ref _nozzleShift, 0, value, LengthStep, ShiftMax); }
+        }
+
+        public static float NozzleShiftY
+        {
+            get => NozzleShift.y;
+            set { EnsureLoaded(); SetAxis(ref _nozzleShift, 1, value, LengthStep, ShiftMax); }
+        }
+
+        /// <summary>
+        /// Rotación de la boquilla respecto del mando izquierdo, en grados (euler, ejes locales de la
+        /// boquilla: Z es su eje, hacia donde sale el chorro). Gira alrededor del mando, que es por
+        /// donde la boquilla real está unida. Se suma encima del <c>rotationOffset</c> de fábrica.
+        /// </summary>
+        public static Vector3 NozzleRotation
+        {
+            get { EnsureLoaded(); return _nozzleRotation; }
+        }
+
+        public static float NozzleRotationX
+        {
+            get => NozzleRotation.x;
+            set { EnsureLoaded(); SetAxis(ref _nozzleRotation, 0, value, RotationStep, RotationMax); }
+        }
+
+        public static float NozzleRotationY
+        {
+            get => NozzleRotation.y;
+            set { EnsureLoaded(); SetAxis(ref _nozzleRotation, 1, value, RotationStep, RotationMax); }
+        }
+
+        public static float NozzleRotationZ
+        {
+            get => NozzleRotation.z;
+            set { EnsureLoaded(); SetAxis(ref _nozzleRotation, 2, value, RotationStep, RotationMax); }
+        }
+
         /// <summary>Vuelve todo a los valores de fábrica.</summary>
         public static void ResetToDefaults()
         {
             EnsureLoaded();
             _volume = 1f;
             _vibration = true;
-            SetExtinguisherDefaults();
+            SetTankDefaults();
+            SetNozzleDefaults();
             _panel = Vector3.zero;
             Save();
         }
 
-        /// <summary>Vuelve sólo la calibración del extintor (altura, desplazamiento, rotación, boquilla).</summary>
+        /// <summary>Vuelve sólo la calibración del tanque (altura, desplazamiento, rotación).</summary>
         public static void ResetExtinguisher()
         {
             EnsureLoaded();
-            SetExtinguisherDefaults();
+            SetTankDefaults();
             Save();
         }
 
-        private static void SetExtinguisherDefaults()
+        /// <summary>Vuelve sólo la calibración de la boquilla (corrimiento, desplazamiento, rotación).</summary>
+        public static void ResetNozzle()
+        {
+            EnsureLoaded();
+            SetNozzleDefaults();
+            Save();
+        }
+
+        private static void SetTankDefaults()
         {
             _tankHeight = DefaultTankHeight;
             _tankShift = DefaultTankShift;
             _tankRotation = DefaultTankRotation;
+        }
+
+        private static void SetNozzleDefaults()
+        {
             _nozzleOffset = DefaultNozzleOffset;
+            _nozzleShift = DefaultNozzleShift;
+            _nozzleRotation = DefaultNozzleRotation;
         }
 
         /// <summary>Vuelve sólo el panel a su posición de fábrica.</summary>
@@ -276,13 +403,28 @@ namespace Extintores
                 Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotX, DefaultTankRotation.x), -RotationMax, RotationMax),
                 Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotY, DefaultTankRotation.y), -RotationMax, RotationMax),
                 Mathf.Clamp(PlayerPrefs.GetFloat(KeyRotZ, DefaultTankRotation.z), -RotationMax, RotationMax));
+            _nozzleShift = new Vector3(
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleShiftX, DefaultNozzleShift.x), -ShiftMax, ShiftMax),
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleShiftY, DefaultNozzleShift.y), -ShiftMax, ShiftMax), 0f);
+            _nozzleRotation = new Vector3(
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleRotX, DefaultNozzleRotation.x), -RotationMax, RotationMax),
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleRotY, DefaultNozzleRotation.y), -RotationMax, RotationMax),
+                Mathf.Clamp(PlayerPrefs.GetFloat(KeyNozzleRotZ, DefaultNozzleRotation.z), -RotationMax, RotationMax));
 
             int version = PlayerPrefs.GetInt(KeyVersion, 1);
             if (version < SettingsVersion)
             {
-                Debug.Log($"[GameSettings] Preferencias de la versión {version}: la calibración del " +
-                          "extintor pasa a los defaults nuevos.");
-                SetExtinguisherDefaults();
+                if (version < 2)
+                {
+                    Debug.Log($"[GameSettings] Preferencias de la versión {version}: la calibración del " +
+                              "extintor pasa a los defaults nuevos.");
+                    SetTankDefaults();
+                    SetNozzleDefaults();
+                }
+                else
+                {
+                    MigrateTankRotationToV3();
+                }
                 PlayerPrefs.SetInt(KeyVersion, SettingsVersion);
                 Save();
             }
@@ -291,7 +433,8 @@ namespace Extintores
             Debug.Log($"[GameSettings] Cargado: volumen {_volume:0.0}, vibración {_vibration}, " +
                       $"mando {_tankHeight * 100f:0} cm, desplazamiento {_tankShift * 100f} cm, " +
                       $"rotación {_tankRotation}°, " +
-                      $"boquilla {_nozzleOffset * 100f:0} cm, panel {_panel * 100f} cm.");
+                      $"boquilla {_nozzleOffset * 100f:0} cm, desplazamiento {_nozzleShift * 100f} cm, " +
+                      $"rotación {_nozzleRotation}°, panel {_panel * 100f} cm.");
         }
 
         private static void Set(ref float field, float value)
@@ -312,6 +455,11 @@ namespace Extintores
             PlayerPrefs.SetFloat(KeyRotX, _tankRotation.x);
             PlayerPrefs.SetFloat(KeyRotY, _tankRotation.y);
             PlayerPrefs.SetFloat(KeyRotZ, _tankRotation.z);
+            PlayerPrefs.SetFloat(KeyNozzleShiftX, _nozzleShift.x);
+            PlayerPrefs.SetFloat(KeyNozzleShiftY, _nozzleShift.y);
+            PlayerPrefs.SetFloat(KeyNozzleRotX, _nozzleRotation.x);
+            PlayerPrefs.SetFloat(KeyNozzleRotY, _nozzleRotation.y);
+            PlayerPrefs.SetFloat(KeyNozzleRotZ, _nozzleRotation.z);
             PlayerPrefs.SetFloat(KeyPanelX, _panel.x);
             PlayerPrefs.SetFloat(KeyPanelY, _panel.y);
             PlayerPrefs.SetFloat(KeyPanelZ, _panel.z);

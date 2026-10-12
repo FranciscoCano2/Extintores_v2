@@ -10,16 +10,15 @@ namespace Extintores.EditorTools
     ///
     /// Disposición (espacio local del menú; cara legible −Z hacia el usuario, +X a su derecha):
     /// <code>
-    ///  General                        Extintor                         Panel
-    ///        CONFIGURACIÓN                  AJUSTAR EXTINTOR                PANEL DE EXTINTORES
-    ///  [−]   VOLUMEN 100 %   [+]    [−] ALTURA DEL MANDO [+]    (aparece a tu derecha)
-    ///      [ VIBRACIÓN: SÍ ]         [−] DESPLAZAMIENTO X[+]    [−]   LATERAL   [+]
-    ///    [ AJUSTAR EXTINTOR ]        [−] DESPLAZAMIENTO Z[+]    [−]   ALTURA    [+]
-    ///   [ POSICIÓN DEL PANEL ]       [−]   ROTACIÓN X    [+]    [−]  DISTANCIA  [+]
-    ///  [ RESTABLECER ] [ VOLVER ]    [−] ROTACIÓN Y (eje)[+]    [ RESTABLECER ] [ LISTO ]
-    ///                                [−]   ROTACIÓN Z    [+]
-    ///                                [−]    BOQUILLA     [+]
-    ///                                [ RESTABLECER ] [ LISTO ]
+    ///  General                        Extintor                     Boquilla                      Panel
+    ///        CONFIGURACIÓN              AJUSTAR EXTINTOR             AJUSTAR BOQUILLA             PANEL DE EXTINTORES
+    ///  [−]   VOLUMEN 100 %   [+]    [−] ALTURA DEL MANDO [+]    [−] AVANCE (Z, eje) [+]    (aparece a tu derecha)
+    ///      [ VIBRACIÓN: SÍ ]         [−] DESPLAZAMIENTO X[+]    [−] DESPLAZAMIENTO X[+]    [−]   LATERAL   [+]
+    ///    [ AJUSTAR EXTINTOR ]        [−] DESPLAZAMIENTO Z[+]    [−] DESPLAZAMIENTO Y[+]    [−]   ALTURA    [+]
+    ///    [ AJUSTAR BOQUILLA ]        [−]   ROTACIÓN X    [+]    [−]   ROTACIÓN X    [+]    [−]  DISTANCIA  [+]
+    ///   [ POSICIÓN DEL PANEL ]       [−] ROTACIÓN Y (eje)[+]    [−]   ROTACIÓN Y    [+]    [ RESTABLECER ] [ LISTO ]
+    ///  [ RESTABLECER ] [ VOLVER ]    [−]   ROTACIÓN Z    [+]    [−] ROTACIÓN Z (eje)[+]
+    ///                                [ RESTABLECER ] [ LISTO ]  [ RESTABLECER ] [ LISTO ]
     /// </code>
     ///
     /// El <c>SettingsPanel</c> es 100 % generado: si le falta algo (p. ej. una versión anterior sin
@@ -119,37 +118,41 @@ namespace Extintores.EditorTools
             var general = NewGroup(panel.transform, "GeneralPage");
             SetRef(so, "generalPage", general);
 
-            NewText(general.transform, "Title", "CONFIGURACIÓN", new Vector3(0f, 0.44f, 0f), 0.013f);
-            Row(general.transform, "Volume", 0.28f, so, "volumeDown", "volumeUp", "volumeLabel", "VOLUMEN\n100 %");
+            // Botones anchos cada 13 cm (miden 11): entran los tres accesos sin pasar el alto del menú.
+            NewText(general.transform, "Title", "CONFIGURACIÓN", new Vector3(0f, 0.46f, 0f), 0.013f);
+            Row(general.transform, "Volume", 0.31f, so, "volumeDown", "volumeUp", "volumeLabel", "VOLUMEN\n100 %");
             SetRef(so, "vibrationToggle",
-                   NewButton(general.transform, "Button_Vibration", "VIBRACIÓN: SÍ", WideSize, new Vector3(0f, 0.13f, 0f)));
+                   NewButton(general.transform, "Button_Vibration", "VIBRACIÓN: SÍ", WideSize, new Vector3(0f, 0.17f, 0f)));
             SetRef(so, "extinguisherPageButton",
-                   NewButton(general.transform, "Button_ExtinguisherSetup", "AJUSTAR EXTINTOR", WideSize, new Vector3(0f, -0.02f, 0f)));
+                   NewButton(general.transform, "Button_ExtinguisherSetup", "AJUSTAR EXTINTOR", WideSize, new Vector3(0f, 0.04f, 0f)));
+            SetRef(so, "nozzlePageButton",
+                   NewButton(general.transform, "Button_NozzleSetup", "AJUSTAR BOQUILLA", WideSize, new Vector3(0f, -0.09f, 0f)));
             SetRef(so, "panelPageButton",
-                   NewButton(general.transform, "Button_PanelPosition", "POSICIÓN DEL PANEL", WideSize, new Vector3(0f, -0.17f, 0f)));
+                   NewButton(general.transform, "Button_PanelPosition", "POSICIÓN DEL PANEL", WideSize, new Vector3(0f, -0.22f, 0f)));
             SetRef(so, "resetButton",
-                   NewButton(general.transform, "Button_Reset", "RESTABLECER", HalfSize, new Vector3(-0.17f, -0.36f, 0f)));
-            back = NewButton(general.transform, "Button_SettingsBack", "VOLVER", HalfSize, new Vector3(0.17f, -0.36f, 0f));
+                   NewButton(general.transform, "Button_Reset", "RESTABLECER", HalfSize, new Vector3(-0.17f, -0.39f, 0f)));
+            back = NewButton(general.transform, "Button_SettingsBack", "VOLVER", HalfSize, new Vector3(0.17f, -0.39f, 0f));
 
-            // ---- página del extintor (calibración del prop físico)
-            var extPage = NewGroup(panel.transform, "ExtinguisherPage");
-            SetRef(so, "extinguisherPage", extPage);
+            // ---- página del extintor (calibración del tanque)
+            // 6 filas: más apretadas que en las otras páginas (paso 12 cm, botones de 10 cm).
+            var t = NewPage(panel.transform, "ExtinguisherPage", so, "extinguisherPage", "AJUSTAR EXTINTOR");
+            Row(t, "Tank", RowY(0), so, "tankDown", "tankUp", "tankLabel", "ALTURA DEL MANDO (Y)\n0 cm", compact: true);
+            Row(t, "ShiftX", RowY(1), so, "shiftXDown", "shiftXUp", "shiftXLabel", "DESPLAZAMIENTO X\n0 cm", compact: true);
+            Row(t, "ShiftZ", RowY(2), so, "shiftZDown", "shiftZUp", "shiftZLabel", "DESPLAZAMIENTO Z\n0 cm", compact: true);
+            Row(t, "RotX", RowY(3), so, "rotXDown", "rotXUp", "rotXLabel", "ROTACIÓN X\n0°", compact: true);
+            Row(t, "RotY", RowY(4), so, "rotYDown", "rotYUp", "rotYLabel", "ROTACIÓN Y (eje)\n0°", compact: true);
+            Row(t, "RotZ", RowY(5), so, "rotZDown", "rotZUp", "rotZLabel", "ROTACIÓN Z\n0°", compact: true);
+            PageFooter(t, "Extinguisher", so, "extinguisherReset", "extinguisherDone");
 
-            // 7 filas: más apretadas que en las otras páginas (paso 12 cm, botones de 10 cm).
-            var t = extPage.transform;
-            NewText(t, "Title", "AJUSTAR EXTINTOR", new Vector3(0f, 0.50f, 0f), 0.011f);
-            Row(t, "Tank", 0.37f, so, "tankDown", "tankUp", "tankLabel", "ALTURA DEL MANDO (Y)\n0 cm", compact: true);
-            Row(t, "ShiftX", 0.25f, so, "shiftXDown", "shiftXUp", "shiftXLabel", "DESPLAZAMIENTO X\n0 cm", compact: true);
-            Row(t, "ShiftZ", 0.13f, so, "shiftZDown", "shiftZUp", "shiftZLabel", "DESPLAZAMIENTO Z\n0 cm", compact: true);
-            Row(t, "RotX", 0.01f, so, "rotXDown", "rotXUp", "rotXLabel", "ROTACIÓN X\n0°", compact: true);
-            Row(t, "RotY", -0.11f, so, "rotYDown", "rotYUp", "rotYLabel", "ROTACIÓN Y (eje)\n0°", compact: true);
-            Row(t, "RotZ", -0.23f, so, "rotZDown", "rotZUp", "rotZLabel", "ROTACIÓN Z\n0°", compact: true);
-            Row(t, "Nozzle", -0.35f, so, "nozzleDown", "nozzleUp", "nozzleLabel", "BOQUILLA\n0 cm", compact: true);
-            SetRef(so, "extinguisherReset",
-                   NewButton(t, "Button_ExtinguisherReset", "RESTABLECER", HalfSize, new Vector3(-0.17f, -0.49f, 0f)));
-            SetRef(so, "extinguisherDone",
-                   NewButton(t, "Button_ExtinguisherDone", "LISTO", HalfSize, new Vector3(0.17f, -0.49f, 0f)));
-            extPage.SetActive(false);
+            // ---- página de la boquilla: los mismos ajustes, con su eje en Z (hacia donde sale el chorro)
+            t = NewPage(panel.transform, "NozzlePage", so, "nozzlePage", "AJUSTAR BOQUILLA");
+            Row(t, "Nozzle", RowY(0), so, "nozzleDown", "nozzleUp", "nozzleLabel", "AVANCE (Z, eje)\n0 cm", compact: true);
+            Row(t, "NozzleShiftX", RowY(1), so, "nozzleShiftXDown", "nozzleShiftXUp", "nozzleShiftXLabel", "DESPLAZAMIENTO X\n0 cm", compact: true);
+            Row(t, "NozzleShiftY", RowY(2), so, "nozzleShiftYDown", "nozzleShiftYUp", "nozzleShiftYLabel", "DESPLAZAMIENTO Y\n0 cm", compact: true);
+            Row(t, "NozzleRotX", RowY(3), so, "nozzleRotXDown", "nozzleRotXUp", "nozzleRotXLabel", "ROTACIÓN X\n0°", compact: true);
+            Row(t, "NozzleRotY", RowY(4), so, "nozzleRotYDown", "nozzleRotYUp", "nozzleRotYLabel", "ROTACIÓN Y\n0°", compact: true);
+            Row(t, "NozzleRotZ", RowY(5), so, "nozzleRotZDown", "nozzleRotZUp", "nozzleRotZLabel", "ROTACIÓN Z (eje)\n0°", compact: true);
+            PageFooter(t, "Nozzle", so, "nozzleReset", "nozzleDone");
 
             // ---- página del panel de extintores
             var panelPage = NewGroup(panel.transform, "PanelPage");
@@ -170,6 +173,26 @@ namespace Extintores.EditorTools
 
             Apply(so);
             panel.SetActive(false); // lo abre MainMenu
+        }
+
+        /// <summary>Altura de la fila <paramref name="i"/> en las páginas de calibración (6 filas de a 12 cm).</summary>
+        private static float RowY(int i) => 0.34f - 0.12f * i;
+
+        /// <summary>Página de calibración (oculta) con su título; devuelve dónde colgar las filas.</summary>
+        private static Transform NewPage(Transform panel, string name, SerializedObject so, string field, string title)
+        {
+            var page = NewGroup(panel, name);
+            SetRef(so, field, page);
+            NewText(page.transform, "Title", title, new Vector3(0f, 0.48f, 0f), 0.011f);
+            page.SetActive(false);
+            return page.transform;
+        }
+
+        /// <summary>"[ RESTABLECER ] [ LISTO ]" al pie de una página de calibración.</summary>
+        private static void PageFooter(Transform page, string name, SerializedObject so, string resetField, string doneField)
+        {
+            SetRef(so, resetField, NewButton(page, $"Button_{name}Reset", "RESTABLECER", HalfSize, new Vector3(-0.17f, -0.44f, 0f)));
+            SetRef(so, doneField, NewButton(page, $"Button_{name}Done", "LISTO", HalfSize, new Vector3(0.17f, -0.44f, 0f)));
         }
 
         private static GameObject NewGroup(Transform parent, string name)
