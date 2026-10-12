@@ -49,7 +49,14 @@ compilación ni excepción, simplemente no pasaba nada. Para cambios de escena u
   - Detached Meta Quest Touch Plus Controller Profile
   - Detached Meta Quest Touch Pro Controller Profile
 
-Archivo: `Assets/XR/Settings/OpenXRPackageSettings.asset`
+- **Meta XR Feature también en Standalone (PC/Link).** Sin él OVRPlugin no se engancha a la sesión
+  OpenXR por Link: la cabeza no recibe pose, la cámara queda en el origen (ojos al ras del piso) y
+  la escena "se mueve con el visor". Ningún error en consola. Pasó en 10/2026: el asset se
+  regeneró solo (features de PC con fileIDs nuevos) y quedó apagado.
+
+Archivo: `Assets/XR/Settings/OpenXRPackageSettings.asset`. Lo verifica `Extintores ▸ Validate Setup`
+y lo prende `Fix Scene Wiring` (`Editor/OpenXrFeatureCheck.cs`: busca las features por nombre de tipo
+y sólo prende, nunca apaga). Si se agrega una feature obligatoria, sumarla a `Required` ahí.
 
 ## OVRManager (en el OVRCameraRig de la escena)
 
@@ -154,6 +161,10 @@ y la espuma sale de la boquilla izquierda.
   punto suave generada en runtime, material `Sprites/Default` → sin depender de assets del pack).
   El chorro sale por el **+Z** del `NozzleTip`. Lee `OVRInput.Get(Axis1D.PrimaryHandTrigger,
   RTouch)` (grip). Expone `IsSpraying` para la futura lógica de apagado de fuegos.
+- "No sale espuma" no da ningún error. `ExtinguisherSpray` loguea con `[Spray]` (una vez por
+  sesión cada uno): mando derecho no conectado, **gatillo** apretado en vez del **grip**, y la
+  posición de la boquilla respecto de la vista en el primer chorro (para descartar que salga fuera
+  del campo visual). En el visor: `adb logcat -s Unity | findstr Spray`.
 - Calibración: offset de la boquilla en `NozzleRig > ExtinguisherMount` (Position/Rotation
   Offset); parámetros del chorro (rate, speed, size, cono) en `NozzleTip > ExtinguisherSpray`.
 - **Densidad de la nube**: la manda `maxRate` (partículas/s). Los defaults del `.cs` NO alcanzan —
@@ -219,10 +230,19 @@ edita `SettingsMenu` (botón CONFIGURACIÓN del menú). Reglas:
   chorro lo hacía con el gatillo suelto y ningún pulso llegaba a sentirse.
 - La calibración NO toca `positionOffset`/`rotationOffset` (esos son la calibración de fábrica de la
   abrazadera): `ExtinguisherMount` suma encima la rotación del usuario (X/Y/Z, pivotando en el
-  `GripPoint`) y un deslizamiento sobre el eje del prop (`userSlide`/`slideAxis`; tanque = +Y del
-  `GripPoint`, boquilla = +Z).
+  `GripPoint`; la boquilla no tiene, pivota en el mando), un deslizamiento sobre el eje del prop
+  (`userSlide`/`slideAxis`; tanque = +Y del `GripPoint`, boquilla = +Z) y un desplazamiento
+  transversal a ese eje (tanque X/Z, boquilla X/Y). Tanque y boquilla tienen cada uno su página
+  y su RESTABLECER.
+- **La rotación del usuario NO es un `Quaternion.Euler`.** Orden: inclinación (los 2 ejes
+  transversales) → deslizamiento + desplazamiento → giro sobre el eje propio (Y del tanque, Z de la
+  boquilla). Con un único `Euler(x, y, z)` la Y queda por FUERA de X/Z: con el tanque inclinado, tocar
+  "ROTACIÓN Y (eje)" lo hacía describir un cono alrededor del eje del mando ("el prefab está
+  torcido", 08/10) — el prefab estaba bien. `GameSettings.SplitTankRotation` es la única fuente; la
+  usan el mount y el preview del Swap. `cfg.version` 3 convierte las prefs viejas sin mover el tanque.
 - **Los defaults de la calibración del usuario NO son cero**: son la calibración medida con el prop
-  real (`GameSettings.Default*`: altura −22 cm, rotación Y 65°, desplazamiento X/Z 2 cm). Si se
+  real (`GameSettings.Default*`: altura −22 cm, rotación Y 65°, desplazamiento (2,66; −0,97) cm, que
+  es el (2, 2) cm medido con la composición vieja, expresado en la nueva). Si se
   cambian, subir `GameSettings.SettingsVersion`: un visor con prefs guardadas no ve los defaults
   nuevos si no se lo migra. Las prefs de las pruebas por Link (editor) viven en el registro:
   `HKCU\Software\Unity\UnityEditor\DefaultCompany\Extintores_v2` (floats como QWORD de un double).

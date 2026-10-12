@@ -101,10 +101,13 @@ entre las apps normales: si lo buscás ahí, no está.
 |---|---|
 | `El proyecto está abierto en el editor de Unity` | Cerrá Unity: el batchmode no puede tomar el lock del proyecto. |
 | `No hay ningún Quest conectado` | Poné el visor, aceptá el cartel de depuración USB y reintentá. Sirve `adb devices` para verificar. |
+| `El Quest está conectado pero no autorizado` (o `adb devices` → `unauthorized`) | El visor olvidó la clave de esta PC (pasa tras una actualización o un reinicio) o se aceptó sin tildar *Permitir siempre*. El batchmode de Unity **reinicia el servidor de adb**, así que el cartel vuelve a saltar al final del build: con el visor puesto, aceptá con **"Permitir siempre desde esta computadora"**. Si no aparece: desenchufar y volver a enchufar con el visor despierto; si sigue, *Revocar autorizaciones de depuración USB* en el visor. El APK ya quedó compilado: alcanza con `tools\install-quest.ps1 -Run`, sin recompilar. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Hay una versión firmada con otra clave: `adb uninstall com.rv.extintores` y reinstalá. ⚠ Desinstalar borra la configuración del usuario: anotá la calibración antes. |
 | Instala pero arranca en negro | Casi siempre XR: revisá que OpenXR esté habilitado en Android y que estén los *Interaction Profiles* detached (ver `CLAUDE.md`). |
 | Los mandos no se ven / las manos no aparecen | Multimodal: `Launch Simultaneous H&C On Startup` tiene que estar **ON** en el OVRManager de la escena al momento de compilar. |
 | Aparecés hundido en el piso | Lo corrige solo `FloorGuard` (ver `CLAUDE.md`). Si persiste: `adb logcat -s Unity \| findstr FloorGuard` dice a qué altura quedaron los ojos y si el origen de piso falló. Si queda corrido unos centímetros (no hundido del todo), es el piso del visor: rehacer el límite (Guardian) ▸ *Confirmar altura del piso*. |
+| Aprieto y no sale espuma | `adb logcat -s Unity \| findstr Spray`: avisa si el mando derecho no llega al juego, si se apretó el **gatillo** en vez del **grip**, y dónde quedó la boquilla respecto de la vista en el primer chorro. |
+| Después de compilar, `git status` muestra `Mobile_RPAsset`, `DefaultVolumeProfile`, `UniversalRenderPipelineGlobalSettings` o `UnityConnectSettings` modificados | Los reescribe el propio build (prefiltrado de variantes de URP, upgrade de settings). No es un cambio de diseño; se commitea aparte. |
 | El build falla sin mensaje claro | `Logs/build-quest.log`, buscar `error CS` (compilación) o `BuildFailedException`. |
 
 ## Antes de entregar

@@ -349,6 +349,30 @@ Yard_Industrial            ← escenografía del pack: piso, muro, props por zon
       Extinguisher Model` aplicado en los prefabs y en `Training.unity` sin mover el GripPoint.
 - [x] **Manguera continua** (01/10): `ExtinguisherHose` de 60 cm entre `HoseOutlet` y `HoseInlet`,
       teñida con el extintor, cableada y validada por `FixHose`.
+- [x] **Página "Ajustar boquilla" en Configuración** (08/10): los mismos ajustes que el tanque —
+      avance sobre su eje (Z, el corrimiento de antes), desplazamiento X/Y (±15 cm, de a 1 cm) y
+      rotación X/Y/Z (±90°, de a 5°, pivotando en el mando izquierdo). Sale de la página del
+      extintor, que queda con 6 filas; cada página tiene su RESTABLECER. Defaults en cero (no hace
+      falta subir `cfg.version`).
+- [x] Aplicar en la escena: `Fix Scene Wiring` rehace el `SettingsPanel` (detecta los campos nuevos
+      vía `RequiredRefs`) → Ctrl+S.
+- [x] **"ROTACIÓN Y (eje)" no giraba el tanque sobre su eje** (08/10): con X/Z distintos de cero
+      describía un cono alrededor del eje del mando, porque un único `Quaternion.Euler` deja la Y
+      por fuera. Ahora: inclinación → desplazamiento → giro sobre el eje propio (también en la
+      boquilla, con Z). `cfg.version` 3 convierte la calibración guardada sin mover el tanque.
+- [x] **Etiqueta del tanque girada 180°** (08/10): al frente (con el manómetro, como en el real)
+      quedaba del lado de afuera de la mano y no se leía. Parámetro `label_turn_deg` de
+      `extintor_1kg.py`; sólo cambia la malla `Label` del FBX, no hace falta re-correr el Swap.
+- [x] **Por Link la escena "se movía con el visor"** (10/2026): el `OpenXRPackageSettings.asset` se
+      regeneró y dejó Meta XR Feature apagado en Standalone. `OpenXrFeatureCheck` (dentro de
+      `Validate Setup` / `Fix Scene Wiring`) verifica y prende las features obligatorias de PC y Android.
+- [x] **Diagnóstico de "no sale espuma"**: log `[Spray]` (mando no conectado, gatillo en vez de
+      grip, dónde quedó la boquilla en el primer chorro).
+- [x] **Build 12/10 en el visor**: compila, instala y arranca bien con todo lo anterior.
+- [ ] Visor: la etiqueta mira al usuario con el extintor en la mano (si queda de costado, ajustar
+      `label_turn_deg` de a 90° y regenerar).
+- [ ] Visor: con el tanque inclinado, ROTACIÓN Y lo gira sobre sí mismo; la boquilla gira, se
+      corre y persiste.
 - [ ] **Visor — modelo y manguera** (ver checklist §6): la válvula virtual sobre la real sin tocar
       Configuración; palanca y salida del lado correcto; la manguera cuelga natural y no tapa el
       chorro; FPS con chorro + manguera.
