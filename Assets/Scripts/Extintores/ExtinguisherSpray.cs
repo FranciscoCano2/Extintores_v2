@@ -107,6 +107,7 @@ namespace Extintores
         {
             float g = OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger, triggerController);
             bool spraying = g >= threshold;
+            Diagnose(g, spraying);
 
             if (spraying != IsSpraying)
             {
@@ -134,6 +135,44 @@ namespace Extintores
         private void OnDisable()
         {
             if (haptics && IsSpraying) StopHaptics();
+        }
+
+        // ------------------------------------------------------------------ diagnóstico
+        // "No sale espuma" tiene tres causas que no dan ningún error: el mando no llega al juego,
+        // se aprieta el gatillo en vez del grip, o el chorro sale pero fuera de la vista. Cada aviso
+        // se loguea UNA vez por sesión (log `[Spray]`).
+        private bool _warnedNoController, _warnedIndexTrigger, _reportedFirstSpray;
+
+        private void Diagnose(float grip, bool spraying)
+        {
+            if (!_warnedNoController && Time.timeSinceLevelLoad > 3f &&
+                (OVRInput.GetConnectedControllers() & triggerController) == 0)
+            {
+                _warnedNoController = true;
+                Debug.LogWarning($"[Spray] El mando {triggerController} no figura conectado: el grip " +
+                                 "siempre lee 0 y el chorro no sale. Conectados: " +
+                                 $"{OVRInput.GetConnectedControllers()}, activo: {OVRInput.GetActiveController()}.");
+            }
+
+            if (!_warnedIndexTrigger && !spraying &&
+                OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, triggerController) > 0.5f)
+            {
+                _warnedIndexTrigger = true;
+                Debug.Log($"[Spray] Se apretó el GATILLO del {triggerController} (grip = {grip:0.00}). " +
+                          "El chorro sale con el GRIP (botón lateral, el del dedo mayor), no con el gatillo.");
+            }
+
+            if (!_reportedFirstSpray && spraying)
+            {
+                _reportedFirstSpray = true;
+                var cam = Camera.main;
+                string where = cam == null ? "sin Camera.main" :
+                    $"a {Vector3.Distance(cam.transform.position, transform.position):0.00} m de la cabeza, " +
+                    $"{Vector3.Angle(cam.transform.forward, transform.position - cam.transform.position):0}° " +
+                    $"fuera del centro de la vista, apuntando {Vector3.Angle(cam.transform.forward, transform.forward):0}° " +
+                    "respecto de la mirada";
+                Debug.Log($"[Spray] Primer chorro: boquilla en {transform.position} ({where}).");
+            }
         }
 
         private void StopHaptics()
