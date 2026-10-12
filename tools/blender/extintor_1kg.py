@@ -15,7 +15,8 @@ Correr con el editor de Unity cerrado o abierto (no toca la escena), desde la ra
     powershell -ExecutionPolicy Bypass -File tools\\blender\\build-extintor.ps1 [-Render]
 
 Convención (Blender, Z arriba, metros): pivote en el centro del fondo, eje del tanque = +Z, palanca
-y manija hacia +X, salida de la válvula hacia −X, manómetro y etiqueta al frente (−Y). En Unity el
+y manija hacia +X, salida de la válvula hacia −X, manómetro al frente (−Y) y etiqueta girada
+label_turn_deg desde ahí (atrás, +Y: del lado que mira al usuario). En Unity el
 editor tool (ExtinguisherModelTool) NO asume cómo convierte el FBX los ejes: mide el eje, la salida
 y la cabeza sobre la malla importada.
 
@@ -56,6 +57,9 @@ P = dict(
     handle_t=0.009,           # estimada: es un perfil en U; de frente se ve ~9 mm
     handle_path=[(0.008, 0.320), (0.030, 0.307), (0.050, 0.289), (0.068, 0.268), (0.085, 0.245), (0.098, 0.225), (0.104, 0.214)],  # estimada
     label_arc_deg=140.0,      # banda de la etiqueta (las texturas son cuadradas)
+    label_turn_deg=180.0,     # giro de la etiqueta sobre el eje, desde el frente (manómetro); + = hacia la
+                              # palanca (+X). En el real está al frente, pero así quedaba del lado de
+                              # afuera de la mano y no se leía: va del lado que mira al usuario.
     label_center_z=0.140,
     label_lift=0.0006,        # despegue de la etiqueta sobre la chapa (evita z-fighting)
     # Boquilla (no existe en el real de 1 kg: tipo ABC de 5 kg)
@@ -243,7 +247,9 @@ def build_label(sides):
     cols = []
     for k in range(n + 1):
         u = k / n
-        a = -math.pi / 2 - arc / 2 + arc * u        # centrada en −Y (frente), u crece hacia +X
+        # centrada en −Y (frente) + label_turn_deg; u crece en sentido antihorario visto desde arriba,
+        # que para quien la mira de afuera es siempre hacia la derecha: el texto no queda espejado.
+        a = -math.pi / 2 + math.radians(P["label_turn_deg"]) - arc / 2 + arc * u
         cols.append((u, bm.verts.new((R * math.cos(a), R * math.sin(a), z0)),
                      bm.verts.new((R * math.cos(a), R * math.sin(a), z1))))
     for (ua, a0, a1), (ub, b0, b1) in zip(cols, cols[1:]):

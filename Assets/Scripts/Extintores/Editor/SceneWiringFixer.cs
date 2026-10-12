@@ -83,6 +83,12 @@ namespace Extintores.EditorTools
 
             CheckLayers();
             FixTrackingOrigin(apply);
+            foreach (var (ok, fixedNow, msg) in OpenXrFeatureCheck.Ensure(apply))
+            {
+                if (!ok) Problem(msg);
+                else if (fixedNow) Fixed(msg);
+                else Ok(msg);
+            }
 
             var spray = Object.FindFirstObjectByType<ExtinguisherSpray>(FindObjectsInactive.Include);
             var swappable = Object.FindFirstObjectByType<ExtinguisherSwappable>(FindObjectsInactive.Include);

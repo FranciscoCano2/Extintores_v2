@@ -45,9 +45,9 @@ namespace Extintores
         [SerializeField] private Vector3 rotationOffset = Vector3.zero;
 
         [Header("Ajuste del usuario (menú Configuración)")]
-        [Tooltip("Qué ajuste de GameSettings aplica a este objeto. Tanque: altura de la abrazadera " +
-                 "sobre su eje + rotación en los 3 ejes alrededor de la abrazadera. Boquilla: " +
-                 "deslizamiento sobre su eje.")]
+        [Tooltip("Qué ajuste de GameSettings aplica a este objeto. Los dos reciben deslizamiento " +
+                 "sobre su eje, desplazamiento transversal y rotación en los 3 ejes alrededor del " +
+                 "agarre. Tanque: eje +Y (altura de la abrazadera). Boquilla: eje +Z.")]
         [SerializeField] private UserSlide userSlide = UserSlide.ByHand;
 
         [Tooltip("Eje sobre el que se desliza, en el espacio del punto de agarre (o de la raíz si no " +
@@ -103,12 +103,20 @@ namespace Extintores
             Vector3 targetPos = anchorPos + anchorRot * positionOffset;
             Quaternion targetRot = anchorRot * Quaternion.Euler(rotationOffset);
 
-            // Ajuste del usuario, encima de la calibración de fábrica. Primero la rotación: como
-            // targetRot/targetPos son la pose del AGARRE, girar acá hace pivotar el tanque alrededor
-            // de la abrazadera, que es por donde está unido al mando. Después el deslizamiento, en el
-            // espacio ya girado, así sigue siendo "a lo largo del tanque".
-            targetRot *= UserRotation();
+            // Ajuste del usuario, encima de la calibración de fábrica, en tres pasos:
+            //  1. Inclinación (los dos ejes transversales): como targetRot/targetPos son la pose del
+            //     AGARRE, hace pivotar el prop alrededor de la abrazadera, que es por donde está unido
+            //     al mando.
+            //  2. Deslizamiento sobre el eje y desplazamiento transversal, en el espacio ya inclinado:
+            //     ubican el eje del prop respecto del mando.
+            //  3. Giro sobre el eje propio, AL FINAL: así gira el prop sobre sí mismo. Con un único
+            //     Quaternion.Euler la Y del tanque quedaba por fuera de X/Z → con el tanque inclinado,
+            //     tocar "ROTACIÓN Y (eje)" lo hacía describir un cono alrededor del eje del mando; y
+            //     el desplazamiento, aplicado después del giro, hacía orbitar el eje alrededor del mando.
+            UserRotation(out Quaternion tilt, out Quaternion spin);
+            targetRot *= tilt;
             targetPos += targetRot * (SlideAxis() * SlideDistance() + UserShift());
+            targetRot *= spin;
 
             if (gripPoint == null)
             {
@@ -132,14 +140,42 @@ namespace Extintores
             userSlide != UserSlide.ByHand ? userSlide
             : hand == MountHand.Right ? UserSlide.TankHeight : UserSlide.NozzleOffset;
 
-        /// <summary>Rotación elegida en Configuración. Sólo el tanque: la boquilla se desliza nada más.</summary>
-        private Quaternion UserRotation() =>
-            ResolvedSlide() == UserSlide.TankHeight ? Quaternion.Euler(GameSettings.TankRotation)
-                                                    : Quaternion.identity;
+        /// <summary>
+        /// Rotación elegida en Configuración, partida en <paramref name="tilt"/> (los dos ejes
+        /// transversales) y <paramref name="spin"/> (el giro sobre el eje propio: Y del tanque, Z de
+        /// la boquilla). La composición la explica <see cref="LateUpdate"/>.
+        /// </summary>
+        private void UserRotation(out Quaternion tilt, out Quaternion spin)
+        {
+            switch (ResolvedSlide())
+            {
+                case UserSlide.TankHeight:
+                    GameSettings.SplitTankRotation(GameSettings.TankRotation, out tilt, out spin);
+                    return;
+                case UserSlide.NozzleOffset:
+                    Vector3 n = GameSettings.NozzleRotation;
+                    tilt = Quaternion.Euler(n.x, n.y, 0f);
+                    spin = Quaternion.AngleAxis(n.z, Vector3.forward);
+                    return;
+                default:
+                    tilt = spin = Quaternion.identity;
+                    return;
+            }
+        }
 
-        /// <summary>Desplazamiento transversal (X/Z del tanque) elegido en Configuración. Sólo el tanque.</summary>
-        private Vector3 UserShift() =>
-            ResolvedSlide() == UserSlide.TankHeight ? GameSettings.TankShift : Vector3.zero;
+        /// <summary>
+        /// Desplazamiento transversal elegido en Configuración: X/Z del tanque, X/Y de la boquilla
+        /// (siempre perpendicular a su eje; el corrimiento sobre el eje es <see cref="SlideDistance"/>).
+        /// </summary>
+        private Vector3 UserShift()
+        {
+            switch (ResolvedSlide())
+            {
+                case UserSlide.TankHeight: return GameSettings.TankShift;
+                case UserSlide.NozzleOffset: return GameSettings.NozzleShift;
+                default: return Vector3.zero;
+            }
+        }
 
         private Vector3 SlideAxis()
         {

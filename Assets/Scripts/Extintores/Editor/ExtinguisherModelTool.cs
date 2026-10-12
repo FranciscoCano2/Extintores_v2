@@ -188,9 +188,10 @@ namespace Extintores.EditorTools
             AssignModelMaterials(model);
 
             // Mando: se invierte la cuenta de ExtinguisherMount con los defaults de GameSettings.
-            Quaternion gripRot = grip.rotation;
-            Quaternion anchorRot = gripRot * Quaternion.Inverse(Quaternion.Euler(GameSettings.DefaultTankRotation));
-            Vector3 anchorPos = grip.position - gripRot * (Vector3.up * -GameSettings.DefaultTankHeight + GameSettings.DefaultTankShift);
+            // (grip = mando · inclinación · giro; el desplazamiento va en el espacio inclinado.)
+            GameSettings.SplitTankRotation(GameSettings.DefaultTankRotation, out Quaternion tilt, out Quaternion spin);
+            Quaternion anchorRot = grip.rotation * Quaternion.Inverse(tilt * spin);
+            Vector3 anchorPos = grip.position - anchorRot * tilt * (Vector3.up * -GameSettings.DefaultTankHeight + GameSettings.DefaultTankShift);
             var controller = GameObject.CreatePrimitive(PrimitiveType.Cube);
             controller.name = "Mando (calibración de fábrica)";
             controller.transform.SetPositionAndRotation(anchorPos, anchorRot);
