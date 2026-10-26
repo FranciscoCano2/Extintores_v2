@@ -1,14 +1,13 @@
 # Extintores_v2 — Entrenamiento en uso de extintores (RV, Meta Quest)
 
-Simulador de Realidad Virtual para practicar el uso de extintores, hecho en Unity para Meta Quest.
-El usuario recorre un patio industrial con fuegos de distintas clases (A sólidos, B líquidos
-inflamables, C eléctrico, K cocina), elige el extintor adecuado y lo apaga con el chorro.
+Simulador de Realidad Virtual para practicar el uso de extintores, hecho en Unity para Meta Quest. Se utiliza un extintor real descargado para mejorar la sensación física.
+El usuario recorre un patio industrial con fuegos de distintas clases (A sólidos, B líquidos inflamables, C eléctrico, K cocina), elige el extintor adecuado y lo apaga con el chorro.
 
 ## Video
 
 ▶️ **Demo del proyecto:** https://youtu.be/hH53c2kRR_0
 
-[![Demo del proyecto](https://img.youtube.com/vi/wDHtwoVVocU/hqdefault.jpg)](https://youtu.be/wDHtwoVVocU)
+[![Demo del proyecto](https://img.youtube.com/vi/wDHtwoVVocU/hqdefault.jpg)](https://youtu.be/hH53c2kRR_0)
 
 ## Qué incluye
 
