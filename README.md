@@ -6,7 +6,7 @@ inflamables, C eléctrico, K cocina), elige el extintor adecuado y lo apaga con 
 
 ## Video
 
-▶️ **Demo del proyecto:** https://youtu.be/wDHtwoVVocU
+▶️ **Demo del proyecto:** https://youtu.be/hH53c2kRR_0
 
 [![Demo del proyecto](https://img.youtube.com/vi/wDHtwoVVocU/hqdefault.jpg)](https://youtu.be/wDHtwoVVocU)
 
