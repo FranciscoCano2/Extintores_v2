@@ -7,7 +7,7 @@ El usuario recorre un patio industrial con fuegos de distintas clases (A sólido
 
 ▶️ **Demo del proyecto:** https://youtu.be/hH53c2kRR_0
 
-[![Demo del proyecto](https://img.youtube.com/vi/wDHtwoVVocU/hqdefault.jpg)](https://youtu.be/hH53c2kRR_0)
+[![Demo del proyecto](https://img.youtube.com/vi/hH53c2kRR_0/hqdefault.jpg)](https://youtu.be/hH53c2kRR_0)
 
 ## Qué incluye
 
