@@ -1,4 +1,4 @@
-#Simulador de entrenamiento con extintor en VR (S.E.E.VR)
+# Simulador de entrenamiento con extintor en VR (S.E.E.VR)
 
 ## Entrenamiento en uso de extintores (RV, Meta Quest)
 
